@@ -128,12 +128,7 @@ fn parse_base_metrics(vector: &str) -> Result<BaseMetrics, CvssError> {
 
     let metrics: HashMap<&str, &str> = without_prefix
         .split('/')
-        .filter_map(|part| {
-            let mut iter = part.splitn(2, ':');
-            let key = iter.next()?;
-            let val = iter.next()?;
-            Some((key, val))
-        })
+        .filter_map(|part| part.split_once(':'))
         .collect();
 
     let av_raw = require_metric(&metrics, "AV")?;
@@ -202,7 +197,8 @@ pub fn base_score(vector: &str) -> Result<f64, CvssError> {
         return Ok(0.0);
     }
 
-    let exploitability = 8.22 * m.attack_vector * m.attack_complexity * m.privileges_required * m.user_interaction;
+    let exploitability =
+        8.22 * m.attack_vector * m.attack_complexity * m.privileges_required * m.user_interaction;
 
     let base = if m.scope_changed {
         f64::min(1.08 * (isc + exploitability), 10.0)
@@ -227,66 +223,42 @@ mod tests {
 
     #[test]
     fn fixture_critical_9_8() {
-        assert_score(
-            "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
-            9.8,
-        );
+        assert_score("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H", 9.8);
     }
 
     #[test]
     fn fixture_medium_5_4_scope_changed() {
-        assert_score(
-            "CVSS:3.1/AV:N/AC:L/PR:L/UI:R/S:C/C:L/I:L/A:N",
-            5.4,
-        );
+        assert_score("CVSS:3.1/AV:N/AC:L/PR:L/UI:R/S:C/C:L/I:L/A:N", 5.4);
     }
 
     #[test]
     fn fixture_medium_6_5() {
-        assert_score(
-            "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N",
-            6.5,
-        );
+        assert_score("CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N", 6.5);
     }
 
     #[test]
     fn fixture_low_3_1() {
-        assert_score(
-            "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:L/I:N/A:N",
-            3.1,
-        );
+        assert_score("CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:L/I:N/A:N", 3.1);
     }
 
     #[test]
     fn fixture_high_7_8() {
-        assert_score(
-            "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H",
-            7.8,
-        );
+        assert_score("CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H", 7.8);
     }
 
     #[test]
     fn fixture_medium_6_1_scope_changed() {
-        assert_score(
-            "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N",
-            6.1,
-        );
+        assert_score("CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N", 6.1);
     }
 
     #[test]
     fn fixture_medium_6_8_scope_changed_high_c() {
-        assert_score(
-            "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:C/C:H/I:N/A:N",
-            6.8,
-        );
+        assert_score("CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:C/C:H/I:N/A:N", 6.8);
     }
 
     #[test]
     fn fixture_medium_5_4_no_scope() {
-        assert_score(
-            "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:L/I:L/A:N",
-            5.4,
-        );
+        assert_score("CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:L/I:L/A:N", 5.4);
     }
 
     #[test]
