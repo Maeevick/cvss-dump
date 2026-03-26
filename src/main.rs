@@ -1,3 +1,5 @@
+mod domain;
+
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
