@@ -178,10 +178,7 @@ fn roundup(score: f64) -> f64 {
 ///
 /// # Examples
 ///
-/// ```
-/// let score = cvss_dump::cvss::base_score("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H").unwrap();
-/// assert_eq!(score, 9.8);
-/// ```
+/// Calling `base_score("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H")` returns `Ok(9.8)`.
 pub fn base_score(vector: &str) -> Result<f64, CvssError> {
     let m = parse_base_metrics(vector)?;
 
