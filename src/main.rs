@@ -1,3 +1,4 @@
+mod cvss;
 mod domain;
 
 use clap::{Parser, Subcommand};
