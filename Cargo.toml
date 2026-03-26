@@ -1,0 +1,20 @@
+[package]
+name = "cvss-dump"
+version = "0.1.0"
+edition = "2024"
+description = "CLI/TUI tool for logging structured security findings and exporting client-ready markdown reports"
+license = "MIT"
+repository = "https://github.com/maeevick/cvss-dump"
+
+[[bin]]
+name = "cvss-dump"
+path = "src/main.rs"
+
+[dependencies]
+ratatui = "0.28"
+crossterm = "0.28"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+uuid = { version = "1.10", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+clap = { version = "4.5", features = ["derive"] }
