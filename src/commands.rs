@@ -185,9 +185,42 @@ pub fn cmd_list() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// Handles the `report` subcommand — exports a session to a markdown report.
-pub fn cmd_report(session: &str) -> Result<(), Box<dyn std::error::Error>> {
-    eprintln!("Not yet implemented: report (session: {session})");
-    Err(Box::from("not yet implemented"))
+///
+/// Loads the named session, guards against zero findings, generates the
+/// markdown content, and writes it atomically to `<session>-report.md` in the
+/// current working directory.
+pub fn cmd_report(name: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let session = match storage::load_session(name) {
+        Ok(s) => s,
+        Err(storage::StorageError::SessionNotFound(_)) => {
+            return Err(Box::from(format!(
+                "Session '{name}' not found. Run 'cvss-dump list' to see available sessions."
+            )));
+        }
+        Err(e) => return Err(Box::new(e)),
+    };
+
+    if session.findings.is_empty() {
+        return Err(Box::from(format!(
+            "Session '{name}' has no findings. Add findings before exporting."
+        )));
+    }
+
+    let markdown = report::generate_report(&session);
+    let filename = format!("{name}-report.md");
+    let tmp_filename = format!("{filename}.tmp");
+
+    fs::write(&tmp_filename, &markdown).map_err(|_| {
+        Box::<dyn std::error::Error>::from("Cannot write to current directory. Check permissions.")
+    })?;
+
+    fs::rename(&tmp_filename, &filename).map_err(|_| {
+        let _ = fs::remove_file(&tmp_filename);
+        Box::<dyn std::error::Error>::from("Cannot write to current directory. Check permissions.")
+    })?;
+
+    println!("Report written to {filename}");
+    Ok(())
 }
 
 #[cfg(test)]
