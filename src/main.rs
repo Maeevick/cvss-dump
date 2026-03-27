@@ -30,7 +30,10 @@ enum Commands {
     /// List all sessions
     List,
     /// Export session to markdown
-    Report { session: String },
+    Report {
+        #[arg(help = "Name of the session to export")]
+        session: String,
+    },
 }
 
 fn main() {
