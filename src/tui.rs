@@ -1006,7 +1006,7 @@ mod tests {
         let original_id = finding.id;
         let mut form = FormState::from_finding(&finding);
         form.buffers[FIELD_TITLE] = "Updated Title".to_string();
-        let updated = form.build_finding();
+        let updated = form.build_finding().expect("build_finding must succeed");
         assert_eq!(updated.id, original_id);
     }
 
