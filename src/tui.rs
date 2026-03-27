@@ -937,8 +937,8 @@ mod tests {
     fn new_finding_gets_unique_uuid_each_time() {
         let form1 = filled_form();
         let form2 = filled_form();
-        let f1 = form1.build_finding();
-        let f2 = form2.build_finding();
+        let f1 = form1.build_finding().expect("build_finding must succeed");
+        let f2 = form2.build_finding().expect("build_finding must succeed");
         assert_ne!(f1.id, f2.id, "each new finding must get a unique UUID");
     }
 
