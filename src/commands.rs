@@ -256,7 +256,7 @@ pub fn cmd_report_from(
     })?;
 
     fs::rename(&tmp_filename, &filename).map_err(|_| {
-        let _ = fs::remove_file(&tmp_filename);
+        let _ = fs::remove_file(&tmp_filename); // Best-effort cleanup; failure does not change the error outcome
         Box::<dyn std::error::Error>::from("Cannot write to current directory. Check permissions.")
     })?;
 
