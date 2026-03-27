@@ -160,7 +160,9 @@ pub fn list_sessions_in(base_dir: &Path) -> Result<Vec<String>, StorageError> {
             let entry = entry.ok()?;
             let file_name = entry.file_name();
             let name = file_name.to_str()?;
-            name.strip_suffix(".json").map(|stem| stem.to_string())
+            name.strip_suffix(".json")
+                .filter(|stem| is_valid_session_name(stem))
+                .map(|stem| stem.to_string())
         })
         .collect();
 
