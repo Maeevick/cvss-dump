@@ -288,9 +288,8 @@ mod tests {
         // generate_report is only called when findings are non-empty.
         // The guard lives in cmd_report — test the guard message directly.
         let name = "empty-session";
-        let expected_msg = format!(
-            "Session '{name}' has no findings. Add findings before exporting."
-        );
+        let expected_msg =
+            format!("Session '{name}' has no findings. Add findings before exporting.");
         assert_eq!(
             expected_msg,
             "Session 'empty-session' has no findings. Add findings before exporting."
