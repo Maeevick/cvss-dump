@@ -36,7 +36,10 @@ impl std::fmt::Display for StorageError {
                 write!(f, "HOME environment variable is not set")
             }
             StorageError::InvalidSessionName(name) => {
-                write!(f, "invalid session name (alphanumeric and hyphens only): {name}")
+                write!(
+                    f,
+                    "invalid session name (alphanumeric and hyphens only): {name}"
+                )
             }
         }
     }
@@ -315,7 +318,10 @@ mod tests {
             msg.contains("invalid session name"),
             "unexpected message: {msg}"
         );
-        assert!(msg.contains("../evil"), "message must include the bad name: {msg}");
+        assert!(
+            msg.contains("../evil"),
+            "message must include the bad name: {msg}"
+        );
     }
 
     // --- session_path_in slug validation ---
