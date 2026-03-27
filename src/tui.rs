@@ -724,6 +724,29 @@ fn render_form_modal(frame: &mut ratatui::Frame, form: &FormState, area: Rect) {
     frame.render_widget(hint, field_areas[FIELD_COUNT + 1]);
 }
 
+/// Renders the delete confirmation overlay as a small centered modal.
+fn render_confirm_delete_overlay(
+    frame: &mut ratatui::Frame,
+    confirm: &ConfirmDeleteState,
+    area: Rect,
+) {
+    let modal_area = centered_rect(50, 20, area);
+
+    frame.render_widget(Clear, modal_area);
+
+    let block = Block::default()
+        .title("Confirm Delete")
+        .borders(Borders::ALL)
+        .style(Style::default().bg(Color::Black).fg(Color::White));
+
+    let prompt = format!("Delete '{}'? (y/n)", confirm.safe_title);
+    let paragraph = Paragraph::new(Span::styled(prompt, Style::default().fg(Color::Yellow)))
+        .block(block)
+        .alignment(Alignment::Center);
+
+    frame.render_widget(paragraph, modal_area);
+}
+
 /// Computes a centered rectangle within `area` using percentage dimensions.
 fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
     let vertical = Layout::default()
