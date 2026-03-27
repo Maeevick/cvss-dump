@@ -317,4 +317,146 @@ mod tests {
         let result = base_score("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:N");
         assert_eq!(result, Ok(0.0));
     }
+
+    // --- MissingMetric coverage ---
+
+    #[test]
+    fn error_on_missing_metric_ac() {
+        let result = base_score("CVSS:3.1/AV:N/PR:N/UI:N/S:U/C:H/I:H/A:H");
+        assert_eq!(result, Err(CvssError::MissingMetric("AC".to_string())));
+    }
+
+    #[test]
+    fn error_on_missing_metric_s() {
+        let result = base_score("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/C:H/I:H/A:H");
+        assert_eq!(result, Err(CvssError::MissingMetric("S".to_string())));
+    }
+
+    #[test]
+    fn error_on_missing_metric_pr() {
+        let result = base_score("CVSS:3.1/AV:N/AC:L/UI:N/S:U/C:H/I:H/A:H");
+        assert_eq!(result, Err(CvssError::MissingMetric("PR".to_string())));
+    }
+
+    #[test]
+    fn error_on_missing_metric_ui() {
+        let result = base_score("CVSS:3.1/AV:N/AC:L/PR:N/S:U/C:H/I:H/A:H");
+        assert_eq!(result, Err(CvssError::MissingMetric("UI".to_string())));
+    }
+
+    #[test]
+    fn error_on_missing_metric_i() {
+        let result = base_score("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/A:H");
+        assert_eq!(result, Err(CvssError::MissingMetric("I".to_string())));
+    }
+
+    #[test]
+    fn error_on_missing_metric_a() {
+        let result = base_score("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H");
+        assert_eq!(result, Err(CvssError::MissingMetric("A".to_string())));
+    }
+
+    // --- InvalidMetricValue coverage ---
+
+    #[test]
+    fn error_on_invalid_ac_value() {
+        let result = base_score("CVSS:3.1/AV:N/AC:X/PR:N/UI:N/S:U/C:H/I:H/A:H");
+        assert_eq!(
+            result,
+            Err(CvssError::InvalidMetricValue {
+                metric: "AC".to_string(),
+                value: "X".to_string()
+            })
+        );
+    }
+
+    #[test]
+    fn error_on_invalid_pr_value() {
+        let result = base_score("CVSS:3.1/AV:N/AC:L/PR:X/UI:N/S:U/C:H/I:H/A:H");
+        assert_eq!(
+            result,
+            Err(CvssError::InvalidMetricValue {
+                metric: "PR".to_string(),
+                value: "X".to_string()
+            })
+        );
+    }
+
+    #[test]
+    fn error_on_invalid_ui_value() {
+        let result = base_score("CVSS:3.1/AV:N/AC:L/PR:N/UI:X/S:U/C:H/I:H/A:H");
+        assert_eq!(
+            result,
+            Err(CvssError::InvalidMetricValue {
+                metric: "UI".to_string(),
+                value: "X".to_string()
+            })
+        );
+    }
+
+    #[test]
+    fn error_on_invalid_c_value() {
+        let result = base_score("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:X/I:H/A:H");
+        assert_eq!(
+            result,
+            Err(CvssError::InvalidMetricValue {
+                metric: "C".to_string(),
+                value: "X".to_string()
+            })
+        );
+    }
+
+    #[test]
+    fn error_on_invalid_i_value() {
+        let result = base_score("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:X/A:H");
+        assert_eq!(
+            result,
+            Err(CvssError::InvalidMetricValue {
+                metric: "I".to_string(),
+                value: "X".to_string()
+            })
+        );
+    }
+
+    #[test]
+    fn error_on_invalid_a_value() {
+        let result = base_score("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:X");
+        assert_eq!(
+            result,
+            Err(CvssError::InvalidMetricValue {
+                metric: "A".to_string(),
+                value: "X".to_string()
+            })
+        );
+    }
+
+    // --- CvssError::Display coverage ---
+
+    #[test]
+    fn display_missing_prefix() {
+        assert_eq!(
+            CvssError::MissingPrefix.to_string(),
+            "vector must start with 'CVSS:3.1/'"
+        );
+    }
+
+    #[test]
+    fn display_missing_metric() {
+        assert_eq!(
+            CvssError::MissingMetric("AV".to_string()).to_string(),
+            "missing required metric: AV"
+        );
+    }
+
+    #[test]
+    fn display_invalid_metric_value() {
+        assert_eq!(
+            CvssError::InvalidMetricValue {
+                metric: "AV".to_string(),
+                value: "X".to_string()
+            }
+            .to_string(),
+            "invalid value 'X' for metric 'AV'"
+        );
+    }
 }
