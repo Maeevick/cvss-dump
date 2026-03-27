@@ -1050,7 +1050,7 @@ mod tests {
         // Change to a critical vector
         form.buffers[FIELD_CVSS_VECTOR] = VALID_VECTOR.to_string();
 
-        let updated = form.build_finding();
+        let updated = form.build_finding().expect("build_finding must succeed");
         assert_eq!(updated.cvss_score, 9.8);
         assert_eq!(updated.severity, Severity::Critical);
     }
