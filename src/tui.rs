@@ -299,12 +299,11 @@ impl FormState {
         self.active_field = self.active_field.checked_sub(1).unwrap_or(FIELD_COUNT - 1);
     }
 
-    /// Appends `ch` to the active text field buffer after stripping ANSI sequences.
+    /// Appends `ch` to the active text field buffer.
     /// No-op when the active field is a metric field.
     pub fn push_char(&mut self, ch: char) {
         if let Some(buf_idx) = text_buffer_index(self.active_field) {
-            let safe = strip_ansi(&ch.to_string());
-            self.buffers[buf_idx].push_str(&safe);
+            self.buffers[buf_idx].push(ch);
         }
     }
 
@@ -1283,9 +1282,7 @@ mod tests {
         form.metric_fields[5].selected = 2; // C=H
         form.metric_fields[6].selected = 2; // I=H
         form.metric_fields[7].selected = 2; // A=H
-        let feedback = form
-            .cvss_live_feedback()
-            .expect("feedback must be Some");
+        let feedback = form.cvss_live_feedback().expect("feedback must be Some");
         assert!(
             feedback.contains("9.8"),
             "expected score 9.8 in: {feedback}"
@@ -1302,7 +1299,10 @@ mod tests {
     fn cycle_metric_field_forward_wraps() {
         let mut field = MetricField { selected: 3 }; // last option for AV (P)
         field.cycle_forward(0); // AV has 4 options: N A L P
-        assert_eq!(field.selected, 0, "cycling past last option must wrap to first");
+        assert_eq!(
+            field.selected, 0,
+            "cycling past last option must wrap to first"
+        );
     }
 
     #[test]
@@ -1310,8 +1310,7 @@ mod tests {
         let mut field = MetricField { selected: 0 }; // first option
         field.cycle_backward(0); // AV has 4 options
         assert_eq!(
-            field.selected,
-            3,
+            field.selected, 3,
             "cycling before first option must wrap to last"
         );
     }
@@ -1347,10 +1346,7 @@ mod tests {
         form.metric_fields[6].selected = 2; // I=H
         form.metric_fields[7].selected = 2; // A=H
         let vector = form.assembled_cvss_vector();
-        assert_eq!(
-            vector,
-            "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
-        );
+        assert_eq!(vector, "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H");
     }
 
     // --- Edit pre-fill from existing vector ---
@@ -1410,8 +1406,7 @@ mod tests {
 
         // AV should remain at default (N, index 0) because X is invalid
         assert_eq!(
-            form.metric_fields[0].selected,
-            CVSS_METRICS[0].default_index,
+            form.metric_fields[0].selected, CVSS_METRICS[0].default_index,
             "invalid AV value must leave field at default"
         );
     }
@@ -1591,7 +1586,11 @@ mod tests {
 
         let mut form = FormState::from_finding(&finding);
         // PR=L is slot 2, index 1
-        assert_eq!(form.metric_fields[2].current_value(2), "L", "PR must be L after parse");
+        assert_eq!(
+            form.metric_fields[2].current_value(2),
+            "L",
+            "PR must be L after parse"
+        );
 
         // Change PR back to N (index 0) and set C=H, I=H, A=H to get 9.8
         form.metric_fields[2].selected = 0; // PR=N
@@ -1654,7 +1653,10 @@ mod tests {
         let av_before = form.metric_fields[0].selected;
         form.push_char('N');
         // Buffer unchanged, metric unchanged (push_char ignores metric fields)
-        assert_eq!(form.buffers[0], "hi", "title buffer must be unchanged when active is metric");
+        assert_eq!(
+            form.buffers[0], "hi",
+            "title buffer must be unchanged when active is metric"
+        );
         assert_eq!(
             form.metric_fields[0].selected, av_before,
             "push_char must not change metric selection"
@@ -1716,8 +1718,7 @@ mod tests {
         }
         for (slot, mf) in form.metric_fields.iter().enumerate() {
             assert_eq!(
-                mf.selected,
-                CVSS_METRICS[slot].default_index,
+                mf.selected, CVSS_METRICS[slot].default_index,
                 "metric_fields[{slot}] must be at default on new form"
             );
         }
