@@ -554,9 +554,13 @@ fn render_detail(frame: &mut ratatui::Frame, state: &TuiState, area: ratatui::la
 }
 
 /// Renders the single-line status bar at the bottom of the screen.
-fn render_status_bar(frame: &mut ratatui::Frame, area: ratatui::layout::Rect) {
-    let hints = Span::raw("j/k: navigate | n: new | e: edit | d: delete | r: report | q: quit");
-    let bar = Paragraph::new(hints).style(Style::default().bg(Color::DarkGray).fg(Color::White));
+/// Shows a transient status message when one is active, otherwise shows the hint line.
+fn render_status_bar(frame: &mut ratatui::Frame, state: &TuiState, area: ratatui::layout::Rect) {
+    let text = match &state.status_message {
+        Some(msg) => Span::styled(msg.as_str(), Style::default().fg(Color::Yellow)),
+        None => Span::raw("j/k: navigate | n: new | e: edit | d: delete | r: report | q: quit"),
+    };
+    let bar = Paragraph::new(text).style(Style::default().bg(Color::DarkGray).fg(Color::White));
     frame.render_widget(bar, area);
 }
 
