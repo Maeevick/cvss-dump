@@ -92,28 +92,40 @@ pub fn cmd_open(session_name: &str) -> Result<(), Box<dyn std::error::Error>> {
     cmd_open_from(session_name, &dir)
 }
 
+/// Maps a `StorageError` for a named session to a user-facing error box.
+///
+/// `SessionNotFound` and `CorruptedJson` produce actionable messages with
+/// session name, file path, and a repair hint. All other variants are wrapped
+/// as-is and propagated to the caller.
+fn storage_load_error_to_user_message(
+    error: storage::StorageError,
+    session_name: &str,
+    base_dir: &std::path::Path,
+) -> Box<dyn std::error::Error> {
+    match &error {
+        storage::StorageError::SessionNotFound(_) => Box::from(format!(
+            "Session '{session_name}' not found. Run 'cvss-dump list' to see available sessions."
+        )),
+        storage::StorageError::CorruptedJson(_) => {
+            let path = base_dir
+                .join(format!("{session_name}.json"))
+                .display()
+                .to_string();
+            Box::from(format!(
+                "Session '{session_name}' is corrupted ({path}). Run 'cvss-dump repair {session_name}' to attempt recovery."
+            ))
+        }
+        _ => Box::new(error) as Box<dyn std::error::Error>,
+    }
+}
+
 /// Testable variant of `cmd_open` that loads from `base_dir` instead of the default storage dir.
 pub fn cmd_open_from(
     session_name: &str,
     base_dir: &std::path::Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let session = storage::load_session_from(session_name, base_dir).map_err(|e| {
-        match &e {
-            storage::StorageError::SessionNotFound(_) => Box::from(format!(
-                "Session '{session_name}' not found. Run 'cvss-dump list' to see available sessions."
-            )),
-            storage::StorageError::CorruptedJson(_) => {
-                let path = base_dir
-                    .join(format!("{session_name}.json"))
-                    .display()
-                    .to_string();
-                Box::from(format!(
-                    "Session '{session_name}' is corrupted ({path}). Run 'cvss-dump repair {session_name}' to attempt recovery."
-                ))
-            }
-            _ => Box::new(e) as Box<dyn std::error::Error>,
-        }
-    })?;
+    let session = storage::load_session_from(session_name, base_dir)
+        .map_err(|e| storage_load_error_to_user_message(e, session_name, base_dir))?;
 
     tui::run_tui(session)
 }
