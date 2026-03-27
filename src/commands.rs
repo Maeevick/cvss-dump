@@ -250,6 +250,7 @@ pub fn cmd_report_from(
     let filename = format!("{name}-report.md");
     let tmp_filename = format!("{filename}.tmp");
 
+    // Per spec: user-facing message suppresses OS error detail
     fs::write(&tmp_filename, &markdown).map_err(|_| {
         Box::<dyn std::error::Error>::from("Cannot write to current directory. Check permissions.")
     })?;
