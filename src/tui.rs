@@ -166,8 +166,9 @@ impl FormState {
     /// `validate()` was called first, and the error message makes that explicit.
     pub fn build_finding(&self) -> Result<Finding, String> {
         let vector = strip_ansi(self.buffers[FIELD_CVSS_VECTOR].trim());
-        let score = crate::cvss::base_score(&vector)
-            .map_err(|_| "build_finding: CVSS parse failed after validate() — this is a bug".to_string())?;
+        let score = crate::cvss::base_score(&vector).map_err(|_| {
+            "build_finding: CVSS parse failed after validate() — this is a bug".to_string()
+        })?;
         let severity = Severity::from_score(score);
 
         let refs_raw = strip_ansi(self.buffers[FIELD_REFERENCES].trim());
@@ -925,7 +926,9 @@ mod tests {
     fn new_finding_round_trip_computes_correct_score_and_severity() {
         let form = filled_form();
         form.validate().expect("form must be valid before building");
-        let finding = form.build_finding().expect("build_finding must succeed after validate");
+        let finding = form
+            .build_finding()
+            .expect("build_finding must succeed after validate");
 
         assert_eq!(finding.title, "SQL Injection");
         assert_eq!(finding.cvss_score, 9.8);
@@ -1091,22 +1094,22 @@ mod tests {
     }
 
     #[test]
-    fn push_char_strips_ansi_escape_sequences() {
-        // push_char calls strip_ansi on the single-char string before appending.
-        // A lone ESC has no continuation byte, so strip_ansi preserves it.
-        // Verify: pushing a normal char appends it, pushing lone ESC also appends it
-        // (strip_ansi does not strip a lone ESC — that matches the documented behaviour).
+    fn push_char_appends_plain_chars_unchanged() {
         let mut form = FormState::new();
-        form.push_char('a');
-        assert_eq!(form.buffers[FIELD_TITLE], "a");
-        // A lone ESC byte passed to strip_ansi is kept (no valid continuation in the string).
-        form.push_char('\x1b');
-        assert_eq!(form.buffers[FIELD_TITLE], "a\x1b");
-        // Verify strip_ansi integration: push_char on '[' and 'm' — they are plain bytes kept.
-        form.push_char('[');
-        form.push_char('m');
-        // All four chars appended individually — no multi-char sequence to strip.
-        assert_eq!(form.buffers[FIELD_TITLE], "a\x1b[m");
+        form.push_char('h');
+        assert_eq!(form.buffers[FIELD_TITLE], "h");
+        form.push_char('i');
+        assert_eq!(form.buffers[FIELD_TITLE], "hi");
+        form.push_char('!');
+        assert_eq!(form.buffers[FIELD_TITLE], "hi!");
+    }
+
+    #[test]
+    fn build_finding_strips_ansi_from_form_buffers() {
+        let mut form = filled_form();
+        form.buffers[FIELD_TITLE] = "Evil\x1b[31mTitle\x1b[0m".to_string();
+        let finding = form.build_finding().expect("build_finding must succeed");
+        assert_eq!(finding.title, "EvilTitle");
     }
 
     #[test]
@@ -1121,10 +1124,18 @@ mod tests {
         let mut state = TuiState::new(session);
         state.open_new_form();
         // All buffers are empty — validate will fail on FIELD_TITLE
-        state.try_save_form().expect("try_save_form must not return Err");
-        assert!(state.form.is_some(), "form must stay open after validation failure");
+        state
+            .try_save_form()
+            .expect("try_save_form must not return Err");
+        assert!(
+            state.form.is_some(),
+            "form must stay open after validation failure"
+        );
         let error = state.form.as_ref().unwrap().error.as_ref();
-        assert!(error.is_some(), "error_message must be set after failed save");
+        assert!(
+            error.is_some(),
+            "error_message must be set after failed save"
+        );
     }
 
     #[test]
