@@ -270,6 +270,144 @@ pub fn cmd_report_from(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use std::path::PathBuf;
+
+    fn unique_temp_dir() -> PathBuf {
+        let mut path = std::env::temp_dir();
+        path.push(format!("cvss-dump-cmd-test-{}", uuid::Uuid::new_v4()));
+        path
+    }
+
+    // --- cmd_open error messages ---
+
+    #[test]
+    fn cmd_open_missing_session_returns_not_found_message() {
+        let dir = unique_temp_dir();
+        fs::create_dir_all(&dir).unwrap();
+
+        let result = cmd_open_from("ghost-session", &dir);
+
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert_eq!(
+            msg,
+            "Session 'ghost-session' not found. Run 'cvss-dump list' to see available sessions."
+        );
+    }
+
+    #[test]
+    fn cmd_open_corrupted_session_message_contains_name_path_and_repair_hint() {
+        let dir = unique_temp_dir();
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("broken-session.json"), b"not valid json").unwrap();
+
+        let result = cmd_open_from("broken-session", &dir);
+
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(
+            msg.contains("broken-session"),
+            "message must contain session name: {msg}"
+        );
+        assert!(
+            msg.contains("broken-session.json"),
+            "message must contain file path: {msg}"
+        );
+        assert!(
+            msg.contains("cvss-dump repair broken-session"),
+            "message must contain repair hint: {msg}"
+        );
+    }
+
+    // --- cmd_report error messages ---
+
+    #[test]
+    fn cmd_report_missing_session_returns_not_found_message() {
+        let dir = unique_temp_dir();
+        fs::create_dir_all(&dir).unwrap();
+
+        let result = cmd_report_from("ghost-report", &dir);
+
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert_eq!(
+            msg,
+            "Session 'ghost-report' not found. Run 'cvss-dump list' to see available sessions."
+        );
+    }
+
+    #[test]
+    fn cmd_report_corrupted_session_message_contains_name_path_and_repair_hint() {
+        let dir = unique_temp_dir();
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("corrupt-report.json"), b"not valid json").unwrap();
+
+        let result = cmd_report_from("corrupt-report", &dir);
+
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(
+            msg.contains("corrupt-report"),
+            "message must contain session name: {msg}"
+        );
+        assert!(
+            msg.contains("corrupt-report.json"),
+            "message must contain file path: {msg}"
+        );
+        assert!(
+            msg.contains("cvss-dump repair corrupt-report"),
+            "message must contain repair hint: {msg}"
+        );
+    }
+
+    #[test]
+    fn cmd_report_zero_findings_returns_no_findings_message() {
+        use crate::domain::Session;
+        use chrono::Utc;
+
+        let dir = unique_temp_dir();
+        let session_name = format!("empty-{}", uuid::Uuid::new_v4().simple());
+        let session = Session {
+            name: session_name.clone(),
+            scope: vec!["10.0.0.1".to_string()],
+            findings: vec![],
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+        storage::save_session_to(&session, &dir).unwrap();
+
+        let result = cmd_report_from(&session_name, &dir);
+
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert_eq!(
+            msg,
+            format!(
+                "Session '{session_name}' has no findings. Add findings before exporting."
+            )
+        );
+    }
+
+    // --- no process::exit inside handlers ---
+
+    #[test]
+    fn cmd_open_missing_session_returns_err_not_exits() {
+        // If cmd_open_from called process::exit(), this test process would terminate.
+        // Reaching the assertion proves it returned Err instead.
+        let dir = unique_temp_dir();
+        fs::create_dir_all(&dir).unwrap();
+        let result = cmd_open_from("never-exists", &dir);
+        assert!(result.is_err(), "must return Err, not exit the process");
+    }
+
+    #[test]
+    fn cmd_report_missing_session_returns_err_not_exits() {
+        let dir = unique_temp_dir();
+        fs::create_dir_all(&dir).unwrap();
+        let result = cmd_report_from("never-exists", &dir);
+        assert!(result.is_err(), "must return Err, not exit the process");
+    }
 
     #[test]
     fn empty_string_is_invalid_slug() {
