@@ -35,6 +35,9 @@ impl std::fmt::Display for StorageError {
             StorageError::HomeDirNotFound => {
                 write!(f, "HOME environment variable is not set")
             }
+            StorageError::InvalidSessionName(name) => {
+                write!(f, "invalid session name (alphanumeric and hyphens only): {name}")
+            }
         }
     }
 }
@@ -52,7 +55,7 @@ pub fn storage_dir() -> Result<PathBuf, StorageError> {
 /// Returns the full filesystem path for a named session file.
 pub fn session_path(name: &str) -> Result<PathBuf, StorageError> {
     let dir = storage_dir()?;
-    Ok(session_path_in(&dir, name))
+    session_path_in(&dir, name)
 }
 
 /// Serialises `session` to JSON and writes it atomically to `storage_dir()`.
@@ -83,19 +86,26 @@ pub fn list_sessions() -> Result<Vec<String>, StorageError> {
 
 // --- path helpers -----------------------------------------------------------
 
-fn session_path_in(base: &Path, name: &str) -> PathBuf {
-    base.join(format!("{name}.json"))
+fn is_valid_session_name(name: &str) -> bool {
+    !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
 }
 
-fn tmp_path_for(final_path: &Path) -> PathBuf {
-    let mut tmp = final_path.to_path_buf();
-    let mut name = final_path
+fn session_path_in(base: &Path, name: &str) -> Result<PathBuf, StorageError> {
+    if !is_valid_session_name(name) {
+        return Err(StorageError::InvalidSessionName(name.to_string()));
+    }
+    Ok(base.join(format!("{name}.json")))
+}
+
+fn tmp_path_for(final_path: &Path) -> Result<PathBuf, StorageError> {
+    let mut file_name = final_path
         .file_name()
-        .expect("session path always has a file name")
+        .ok_or_else(|| StorageError::WriteFailed(std::io::Error::other("path has no file name")))?
         .to_os_string();
-    name.push(".tmp");
-    tmp.set_file_name(name);
-    tmp
+    file_name.push(".tmp");
+    let mut tmp = final_path.to_path_buf();
+    tmp.set_file_name(file_name);
+    Ok(tmp)
 }
 
 fn ensure_dir_exists(path: &Path) -> Result<(), StorageError> {
@@ -109,8 +119,8 @@ fn ensure_dir_exists(path: &Path) -> Result<(), StorageError> {
 /// Intended for testing. Production code calls `save_session`.
 pub fn save_session_to(session: &Session, base_dir: &Path) -> Result<(), StorageError> {
     ensure_dir_exists(base_dir)?;
-    let final_path = session_path_in(base_dir, &session.name);
-    let tmp_path = tmp_path_for(&final_path);
+    let final_path = session_path_in(base_dir, &session.name)?;
+    let tmp_path = tmp_path_for(&final_path)?;
 
     let json = serde_json::to_string_pretty(session)
         .map_err(|e| StorageError::WriteFailed(std::io::Error::other(e)))?;
@@ -125,7 +135,7 @@ pub fn save_session_to(session: &Session, base_dir: &Path) -> Result<(), Storage
 ///
 /// Intended for testing. Production code calls `load_session`.
 pub fn load_session_from(name: &str, base_dir: &Path) -> Result<Session, StorageError> {
-    let path = session_path_in(base_dir, name);
+    let path = session_path_in(base_dir, name)?;
 
     if !path.exists() {
         return Err(StorageError::SessionNotFound(name.to_string()));
@@ -296,6 +306,39 @@ mod tests {
     fn display_home_dir_not_found() {
         let msg = StorageError::HomeDirNotFound.to_string();
         assert_eq!(msg, "HOME environment variable is not set");
+    }
+
+    #[test]
+    fn display_invalid_session_name() {
+        let msg = StorageError::InvalidSessionName("../evil".to_string()).to_string();
+        assert!(
+            msg.contains("invalid session name"),
+            "unexpected message: {msg}"
+        );
+        assert!(msg.contains("../evil"), "message must include the bad name: {msg}");
+    }
+
+    // --- session_path_in slug validation ---
+
+    #[test]
+    fn session_path_in_rejects_path_traversal() {
+        let dir = unique_temp_dir();
+        let result = session_path_in(&dir, "../traversal");
+        assert!(
+            matches!(result, Err(StorageError::InvalidSessionName(ref n)) if n == "../traversal"),
+            "expected InvalidSessionName, got {result:?}"
+        );
+    }
+
+    #[test]
+    fn session_path_in_accepts_valid_slug() {
+        let dir = unique_temp_dir();
+        let result = session_path_in(&dir, "valid-name");
+        assert!(result.is_ok(), "expected Ok, got {result:?}");
+        assert!(
+            result.unwrap().ends_with("valid-name.json"),
+            "expected path ending with valid-name.json"
+        );
     }
 
     // --- storage_dir() ---
