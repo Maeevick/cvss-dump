@@ -1322,6 +1322,10 @@ mod tests {
             state.confirm_delete.is_none(),
             "confirm_delete must be closed after deletion"
         );
+        assert_eq!(
+            state.selected, 0,
+            "selected must be 0 when session is empty after deletion"
+        );
     }
 
     #[test]
