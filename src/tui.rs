@@ -945,7 +945,7 @@ mod tests {
     #[test]
     fn new_finding_references_empty_when_buffer_empty() {
         let form = filled_form();
-        let finding = form.build_finding();
+        let finding = form.build_finding().expect("build_finding must succeed");
         assert!(finding.references.is_empty());
     }
 
