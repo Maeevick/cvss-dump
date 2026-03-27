@@ -1026,7 +1026,8 @@ mod tests {
             .form
             .as_ref()
             .expect("form must still be open")
-            .build_finding();
+            .build_finding()
+            .expect("build_finding must succeed");
 
         let id = finding.id;
         if let Some(existing) = state.session.findings.iter_mut().find(|f| f.id == id) {
