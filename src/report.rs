@@ -160,7 +160,10 @@ mod tests {
 
         assert!(critical_pos < high_pos, "Critical must appear before High");
         assert!(high_pos < medium_pos, "High must appear before Medium");
-        assert!(medium_pos < info_pos, "Medium must appear before Informational");
+        assert!(
+            medium_pos < info_pos,
+            "Medium must appear before Informational"
+        );
     }
 
     #[test]
