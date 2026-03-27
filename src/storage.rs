@@ -18,6 +18,8 @@ pub enum StorageError {
     ReadFailed(std::io::Error),
     /// The `HOME` environment variable is not set.
     HomeDirNotFound,
+    /// The session name contains characters outside `[a-zA-Z0-9-]`.
+    InvalidSessionName(String),
 }
 
 impl std::fmt::Display for StorageError {
