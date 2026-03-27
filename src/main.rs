@@ -2,6 +2,7 @@ mod commands;
 mod cvss;
 mod domain;
 mod storage;
+mod tui;
 
 use clap::{Parser, Subcommand};
 
