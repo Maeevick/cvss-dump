@@ -1,6 +1,7 @@
 mod commands;
 mod cvss;
 mod domain;
+mod report;
 mod storage;
 mod tui;
 
