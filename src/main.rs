@@ -23,7 +23,10 @@ enum Commands {
     /// Create a new session
     New,
     /// Open session in TUI
-    Open { session: String },
+    Open {
+        #[arg(help = "Name of the session to open in TUI")]
+        session: String,
+    },
     /// List all sessions
     List,
     /// Export session to markdown
