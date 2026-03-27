@@ -4,6 +4,7 @@ use chrono::Utc;
 
 use crate::domain::Session;
 use crate::storage;
+use crate::tui;
 
 /// Returns `true` when `name` is a valid session slug: non-empty and
 /// composed exclusively of ASCII alphanumeric characters or hyphens (`-`).
