@@ -28,20 +28,85 @@ pub enum FormMode {
     Edit(Uuid),
 }
 
-/// Index constants for the form fields in their display order.
-pub const FIELD_TITLE: usize = 0;
-pub const FIELD_CVSS_VECTOR: usize = 1;
-pub const FIELD_AFFECTED: usize = 2;
-pub const FIELD_DESCRIPTION: usize = 3;
-pub const FIELD_EVIDENCE: usize = 4;
-pub const FIELD_REMEDIATION: usize = 5;
-pub const FIELD_REFERENCES: usize = 6;
-pub const FIELD_COUNT: usize = 7;
+// ─── Field index constants ───────────────────────────────────────────────────
+//
+// Layout order (14 fields total):
+//   0  Title          (text)
+//   1  AV             (metric)
+//   2  AC             (metric)
+//   3  PR             (metric)
+//   4  UI             (metric)
+//   5  S              (metric)
+//   6  C              (metric)
+//   7  I              (metric)
+//   8  A              (metric)
+//   9  Affected       (text)
+//  10  Description    (text)
+//  11  Evidence       (text)
+//  12  Remediation    (text)
+//  13  References     (text, optional)
 
-/// Human-readable labels for each form field, in field-index order.
+pub const FIELD_TITLE: usize = 0;
+pub const FIELD_AV: usize = 1;
+pub const FIELD_AC: usize = 2;
+pub const FIELD_PR: usize = 3;
+pub const FIELD_UI: usize = 4;
+pub const FIELD_S: usize = 5;
+pub const FIELD_C: usize = 6;
+pub const FIELD_I: usize = 7;
+pub const FIELD_A: usize = 8;
+pub const FIELD_AFFECTED: usize = 9;
+pub const FIELD_DESCRIPTION: usize = 10;
+pub const FIELD_EVIDENCE: usize = 11;
+pub const FIELD_REMEDIATION: usize = 12;
+pub const FIELD_REFERENCES: usize = 13;
+pub const FIELD_COUNT: usize = 14;
+
+/// Number of text-only fields (non-metric fields in `buffers`).
+/// buffers covers: Title(0), Affected(1), Description(2), Evidence(3), Remediation(4), References(5)
+pub const TEXT_FIELD_COUNT: usize = 6;
+
+/// Maps a form-field index to its corresponding buffer slot index.
+/// Metric fields (1–8) have no buffer — they use `metric_fields`.
+/// Text fields map as: Title→0, Affected→1, Description→2, Evidence→3,
+///                     Remediation→4, References→5.
+fn text_buffer_index(field_idx: usize) -> Option<usize> {
+    match field_idx {
+        FIELD_TITLE => Some(0),
+        FIELD_AFFECTED => Some(1),
+        FIELD_DESCRIPTION => Some(2),
+        FIELD_EVIDENCE => Some(3),
+        FIELD_REMEDIATION => Some(4),
+        FIELD_REFERENCES => Some(5),
+        _ => None,
+    }
+}
+
+/// Returns true when `field_idx` corresponds to one of the 8 CVSS metric fields.
+pub fn is_metric_field(field_idx: usize) -> bool {
+    (FIELD_AV..=FIELD_A).contains(&field_idx)
+}
+
+/// Maps a metric field index to its corresponding slot in `metric_fields`.
+fn metric_slot(field_idx: usize) -> Option<usize> {
+    if is_metric_field(field_idx) {
+        Some(field_idx - FIELD_AV)
+    } else {
+        None
+    }
+}
+
+/// Human-readable label for each form field, in field-index order.
 pub const FIELD_LABELS: [&str; FIELD_COUNT] = [
     "Title",
-    "CVSS Vector",
+    "AV (Attack Vector)",
+    "AC (Attack Complexity)",
+    "PR (Privileges Required)",
+    "UI (User Interaction)",
+    "S (Scope)",
+    "C (Confidentiality)",
+    "I (Integrity)",
+    "A (Availability)",
     "Affected",
     "Description",
     "Evidence",
@@ -49,22 +114,132 @@ pub const FIELD_LABELS: [&str; FIELD_COUNT] = [
     "References (optional)",
 ];
 
-/// Fields that must be non-empty for the form to be valid.
-const REQUIRED_FIELD_INDICES: [usize; 6] = [
+/// Fields that must be non-empty (or always-valid) for the form to be valid.
+/// References is omitted (optional). Metric fields always have a selection.
+const REQUIRED_TEXT_FIELD_INDICES: [usize; 5] = [
     FIELD_TITLE,
-    FIELD_CVSS_VECTOR,
     FIELD_AFFECTED,
     FIELD_DESCRIPTION,
     FIELD_EVIDENCE,
     FIELD_REMEDIATION,
 ];
 
+// ─── Metric field definitions ─────────────────────────────────────────────────
+
+/// Descriptor for a single CVSS metric field: its key abbreviation and the
+/// ordered list of valid option codes.
+pub struct MetricDescriptor {
+    pub key: &'static str,
+    pub options: &'static [&'static str],
+    pub default_index: usize,
+}
+
+/// The 8 CVSS v3.1 base metrics in vector order, each with their valid values.
+pub const CVSS_METRICS: [MetricDescriptor; 8] = [
+    MetricDescriptor {
+        key: "AV",
+        options: &["N", "A", "L", "P"],
+        default_index: 0,
+    },
+    MetricDescriptor {
+        key: "AC",
+        options: &["L", "H"],
+        default_index: 0,
+    },
+    MetricDescriptor {
+        key: "PR",
+        options: &["N", "L", "H"],
+        default_index: 0,
+    },
+    MetricDescriptor {
+        key: "UI",
+        options: &["N", "R"],
+        default_index: 0,
+    },
+    MetricDescriptor {
+        key: "S",
+        options: &["U", "C"],
+        default_index: 0,
+    },
+    MetricDescriptor {
+        key: "C",
+        options: &["N", "L", "H"],
+        default_index: 0,
+    },
+    MetricDescriptor {
+        key: "I",
+        options: &["N", "L", "H"],
+        default_index: 0,
+    },
+    MetricDescriptor {
+        key: "A",
+        options: &["N", "L", "H"],
+        default_index: 0,
+    },
+];
+
+/// Runtime selection state for a single CVSS metric field.
+#[derive(Debug, Clone)]
+pub struct MetricField {
+    /// Index into `CVSS_METRICS[slot].options` for the currently selected value.
+    pub selected: usize,
+}
+
+impl MetricField {
+    fn at_default(slot: usize) -> Self {
+        Self {
+            selected: CVSS_METRICS[slot].default_index,
+        }
+    }
+
+    pub fn current_value(&self, slot: usize) -> &'static str {
+        CVSS_METRICS[slot].options[self.selected]
+    }
+
+    /// Advances selection forward, wrapping past the last option to the first.
+    pub fn cycle_forward(&mut self, slot: usize) {
+        let len = CVSS_METRICS[slot].options.len();
+        self.selected = (self.selected + 1) % len;
+    }
+
+    /// Moves selection backward, wrapping before the first option to the last.
+    pub fn cycle_backward(&mut self, slot: usize) {
+        let len = CVSS_METRICS[slot].options.len();
+        self.selected = self.selected.checked_sub(1).unwrap_or(len - 1);
+    }
+
+    /// Selects the option matching `letter` (case-insensitive) if it exists.
+    /// Does nothing when `letter` is not a valid option for this metric.
+    pub fn select_by_letter(&mut self, slot: usize, letter: char) {
+        let upper = letter.to_ascii_uppercase().to_string();
+        if let Some(pos) = CVSS_METRICS[slot].options.iter().position(|&v| v == upper) {
+            self.selected = pos;
+        }
+    }
+
+    /// Tries to select the value matching `value`. Returns false when `value`
+    /// is not a valid option for this metric — selection is left unchanged.
+    pub fn try_select_value(&mut self, slot: usize, value: &str) -> bool {
+        if let Some(pos) = CVSS_METRICS[slot].options.iter().position(|&v| v == value) {
+            self.selected = pos;
+            true
+        } else {
+            false
+        }
+    }
+}
+
+// ─── FormState ────────────────────────────────────────────────────────────────
+
 /// All runtime state for the finding form modal.
 #[derive(Debug, Clone)]
 pub struct FormState {
-    /// Text buffer for each field, indexed by the `FIELD_*` constants.
-    pub buffers: [String; FIELD_COUNT],
-    /// Index of the currently focused field.
+    /// Text buffers for the 6 free-text fields: Title, Affected, Description,
+    /// Evidence, Remediation, References — indexed by `text_buffer_index()`.
+    pub buffers: [String; TEXT_FIELD_COUNT],
+    /// Selection state for the 8 CVSS metric fields, in metric-slot order (0=AV … 7=A).
+    pub metric_fields: [MetricField; 8],
+    /// Index of the currently focused field (0–13, uses `FIELD_*` constants).
     pub active_field: usize,
     /// Validation or save error to display inline.
     pub error: Option<String>,
@@ -73,10 +248,20 @@ pub struct FormState {
 }
 
 impl FormState {
-    /// Creates a blank form for a new finding.
+    /// Creates a blank form for a new finding with all metric fields at their defaults.
     pub fn new() -> Self {
         Self {
             buffers: Default::default(),
+            metric_fields: [
+                MetricField::at_default(0),
+                MetricField::at_default(1),
+                MetricField::at_default(2),
+                MetricField::at_default(3),
+                MetricField::at_default(4),
+                MetricField::at_default(5),
+                MetricField::at_default(6),
+                MetricField::at_default(7),
+            ],
             active_field: FIELD_TITLE,
             error: None,
             mode: FormMode::New,
@@ -84,22 +269,24 @@ impl FormState {
     }
 
     /// Creates a pre-filled form for editing the given finding.
+    ///
+    /// Text fields are populated directly from the `Finding`. The 8 metric
+    /// fields are populated by parsing `finding.cvss_vector`; any metric whose
+    /// stored value is unrecognised falls back to its default.
     pub fn from_finding(finding: &Finding) -> Self {
-        let mut buffers: [String; FIELD_COUNT] = Default::default();
-        buffers[FIELD_TITLE] = finding.title.clone();
-        buffers[FIELD_CVSS_VECTOR] = finding.cvss_vector.clone();
-        buffers[FIELD_AFFECTED] = finding.affected.clone();
-        buffers[FIELD_DESCRIPTION] = finding.description.clone();
-        buffers[FIELD_EVIDENCE] = finding.evidence.clone();
-        buffers[FIELD_REMEDIATION] = finding.remediation.clone();
-        buffers[FIELD_REFERENCES] = finding.references.join(", ");
+        let mut form = Self::new();
+        form.mode = FormMode::Edit(finding.id);
 
-        Self {
-            buffers,
-            active_field: FIELD_TITLE,
-            error: None,
-            mode: FormMode::Edit(finding.id),
-        }
+        form.buffers[0] = finding.title.clone();
+        form.buffers[1] = finding.affected.clone();
+        form.buffers[2] = finding.description.clone();
+        form.buffers[3] = finding.evidence.clone();
+        form.buffers[4] = finding.remediation.clone();
+        form.buffers[5] = finding.references.join(", ");
+
+        parse_cvss_vector_into_metrics(&finding.cvss_vector, &mut form.metric_fields);
+
+        form
     }
 
     /// Moves focus to the next field, wrapping at the end.
@@ -112,44 +299,82 @@ impl FormState {
         self.active_field = self.active_field.checked_sub(1).unwrap_or(FIELD_COUNT - 1);
     }
 
-    /// Appends `ch` to the active field buffer after stripping ANSI sequences.
+    /// Appends `ch` to the active text field buffer after stripping ANSI sequences.
+    /// No-op when the active field is a metric field.
     pub fn push_char(&mut self, ch: char) {
-        let safe = strip_ansi(&ch.to_string());
-        self.buffers[self.active_field].push_str(&safe);
+        if let Some(buf_idx) = text_buffer_index(self.active_field) {
+            let safe = strip_ansi(&ch.to_string());
+            self.buffers[buf_idx].push_str(&safe);
+        }
     }
 
-    /// Removes the last character from the active field buffer.
+    /// Removes the last character from the active text field buffer.
+    /// No-op when the active field is a metric field.
     pub fn pop_char(&mut self) {
-        self.buffers[self.active_field].pop();
+        if let Some(buf_idx) = text_buffer_index(self.active_field) {
+            self.buffers[buf_idx].pop();
+        }
+    }
+
+    /// Cycles the active metric field forward. No-op for text fields.
+    pub fn cycle_active_metric_forward(&mut self) {
+        if let Some(slot) = metric_slot(self.active_field) {
+            self.metric_fields[slot].cycle_forward(slot);
+        }
+    }
+
+    /// Cycles the active metric field backward. No-op for text fields.
+    pub fn cycle_active_metric_backward(&mut self) {
+        if let Some(slot) = metric_slot(self.active_field) {
+            self.metric_fields[slot].cycle_backward(slot);
+        }
+    }
+
+    /// Selects a metric value by letter for the active metric field.
+    /// No-op for text fields or unrecognised letters.
+    pub fn select_metric_by_letter(&mut self, ch: char) {
+        if let Some(slot) = metric_slot(self.active_field) {
+            self.metric_fields[slot].select_by_letter(slot, ch);
+        }
+    }
+
+    /// Assembles the CVSS v3.1 vector string from the 8 metric selections.
+    pub fn assembled_cvss_vector(&self) -> String {
+        format!(
+            "CVSS:3.1/AV:{}/AC:{}/PR:{}/UI:{}/S:{}/C:{}/I:{}/A:{}",
+            self.metric_fields[0].current_value(0),
+            self.metric_fields[1].current_value(1),
+            self.metric_fields[2].current_value(2),
+            self.metric_fields[3].current_value(3),
+            self.metric_fields[4].current_value(4),
+            self.metric_fields[5].current_value(5),
+            self.metric_fields[6].current_value(6),
+            self.metric_fields[7].current_value(7),
+        )
     }
 
     /// Validates all form fields.
     ///
-    /// Returns `Ok(())` when every required field is non-empty and the CVSS
-    /// vector parses to a valid score. Returns `Err(message)` for the first
-    /// violation found, giving required-field errors priority over CVSS
-    /// format errors.
+    /// Returns `Ok(())` when every required text field is non-empty.
+    /// Metric fields always have a valid selection and are never checked for
+    /// emptiness. Returns `Err(message)` for the first violation found.
     pub fn validate(&self) -> Result<(), String> {
-        for &idx in &REQUIRED_FIELD_INDICES {
-            if self.buffers[idx].trim().is_empty() {
-                return Err(format!("⚠ {} is required", FIELD_LABELS[idx]));
+        for &field_idx in &REQUIRED_TEXT_FIELD_INDICES {
+            let buf_idx = text_buffer_index(field_idx)
+                .expect("REQUIRED_TEXT_FIELD_INDICES contains only text-field indices");
+            if self.buffers[buf_idx].trim().is_empty() {
+                return Err(format!("⚠ {} is required", FIELD_LABELS[field_idx]));
             }
         }
-        let vector = self.buffers[FIELD_CVSS_VECTOR].trim();
-        crate::cvss::base_score(vector)
-            .map(|_| ())
-            .map_err(|_| "⚠ Invalid CVSS v3.1 vector — cannot save.".to_string())
+        Ok(())
     }
 
-    /// Returns the computed score and severity label for the current CVSS
-    /// vector buffer, or an error string when the buffer is non-empty but
-    /// malformed. Returns `None` when the buffer is empty.
+    /// Returns the computed score and severity label for the assembled CVSS vector.
+    /// Always returns `Some` because the vector is always well-formed from metric
+    /// selections.
     pub fn cvss_live_feedback(&self) -> Option<String> {
-        let vector = self.buffers[FIELD_CVSS_VECTOR].trim();
-        if vector.is_empty() {
-            return None;
-        }
-        match crate::cvss::base_score(vector) {
+        let vector = self.assembled_cvss_vector();
+        match crate::cvss::base_score(&vector) {
             Ok(score) => {
                 let severity = Severity::from_score(score);
                 let label = severity_label(&severity);
@@ -159,19 +384,19 @@ impl FormState {
         }
     }
 
-    /// Builds a `Finding` from the current form buffers.
+    /// Builds a `Finding` from the current form state.
     ///
     /// Caller must have already validated the form via `validate()`.
-    /// Returns `Err` if the CVSS vector fails to parse — this is a bug if
-    /// `validate()` was called first, and the error message makes that explicit.
+    /// Returns `Err` if the assembled CVSS vector fails to parse — this is a
+    /// bug if `validate()` was called first.
     pub fn build_finding(&self) -> Result<Finding, String> {
-        let vector = strip_ansi(self.buffers[FIELD_CVSS_VECTOR].trim());
+        let vector = self.assembled_cvss_vector();
         let score = crate::cvss::base_score(&vector).map_err(|_| {
-            "build_finding: CVSS parse failed after validate() — this is a bug".to_string()
+            "build_finding: assembled CVSS vector failed to parse — this is a bug".to_string()
         })?;
         let severity = Severity::from_score(score);
 
-        let refs_raw = strip_ansi(self.buffers[FIELD_REFERENCES].trim());
+        let refs_raw = strip_ansi(self.buffers[5].trim());
         let references: Vec<String> = if refs_raw.is_empty() {
             vec![]
         } else {
@@ -189,18 +414,40 @@ impl FormState {
 
         Ok(Finding {
             id,
-            title: strip_ansi(self.buffers[FIELD_TITLE].trim()),
+            title: strip_ansi(self.buffers[0].trim()),
             cvss_vector: vector,
             cvss_score: score,
             severity,
-            affected: strip_ansi(self.buffers[FIELD_AFFECTED].trim()),
-            description: strip_ansi(self.buffers[FIELD_DESCRIPTION].trim()),
-            evidence: strip_ansi(self.buffers[FIELD_EVIDENCE].trim()),
-            remediation: strip_ansi(self.buffers[FIELD_REMEDIATION].trim()),
+            affected: strip_ansi(self.buffers[1].trim()),
+            description: strip_ansi(self.buffers[2].trim()),
+            evidence: strip_ansi(self.buffers[3].trim()),
+            remediation: strip_ansi(self.buffers[4].trim()),
             references,
         })
     }
 }
+
+/// Parses a CVSS v3.1 vector string and populates metric selections in-place.
+///
+/// Format: `CVSS:3.1/AV:<v>/AC:<v>/PR:<v>/UI:<v>/S:<v>/C:<v>/I:<v>/A:<v>`
+///
+/// Each recognised segment updates the corresponding metric field. Segments
+/// with an unrecognised value leave the field at its current selection
+/// (defaults when called on a freshly-constructed `FormState`).
+fn parse_cvss_vector_into_metrics(vector: &str, fields: &mut [MetricField; 8]) {
+    for segment in vector.split('/') {
+        let mut parts = segment.splitn(2, ':');
+        let Some(key) = parts.next() else { continue };
+        let Some(value) = parts.next() else { continue };
+
+        let slot = CVSS_METRICS.iter().position(|m| m.key == key);
+        if let Some(slot) = slot {
+            fields[slot].try_select_value(slot, value);
+        }
+    }
+}
+
+// ─── RAII terminal guard ──────────────────────────────────────────────────────
 
 /// RAII guard that restores the terminal on drop, even when an error occurs.
 struct TerminalGuard;
@@ -211,6 +458,8 @@ impl Drop for TerminalGuard {
         let _ = execute!(io::stdout(), LeaveAlternateScreen);
     }
 }
+
+// ─── TUI runtime state ────────────────────────────────────────────────────────
 
 /// State for the delete confirmation overlay.
 #[derive(Debug, Clone)]
@@ -289,7 +538,7 @@ impl TuiState {
         self.session.findings.get(self.selected)
     }
 
-    /// Opens the new-finding form with empty buffers.
+    /// Opens the new-finding form with empty buffers and default metric selections.
     fn open_new_form(&mut self) {
         self.form = Some(FormState::new());
     }
@@ -394,6 +643,8 @@ impl TuiState {
     }
 }
 
+// ─── TUI entry point ──────────────────────────────────────────────────────────
+
 /// Launches the TUI for the given session.
 ///
 /// Enables raw mode and the alternate screen, runs the event loop, and
@@ -450,6 +701,8 @@ pub fn run_tui(session: Session) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+// ─── Key handlers ─────────────────────────────────────────────────────────────
+
 /// Handles a key event while the form modal is open.
 fn handle_form_key(
     state: &mut TuiState,
@@ -461,6 +714,8 @@ fn handle_form_key(
         None => return Ok(()),
     };
 
+    let active = form.active_field;
+
     match code {
         KeyCode::Esc => {
             state.close_form();
@@ -471,11 +726,23 @@ fn handle_form_key(
         KeyCode::BackTab => {
             form.focus_prev();
         }
+        KeyCode::Char('s') if modifiers.contains(KeyModifiers::CONTROL) => {
+            state.try_save_form()?;
+        }
+        KeyCode::Right if is_metric_field(active) => {
+            form.cycle_active_metric_forward();
+        }
+        KeyCode::Left if is_metric_field(active) => {
+            form.cycle_active_metric_backward();
+        }
+        KeyCode::Backspace | KeyCode::Delete if is_metric_field(active) => {
+            // metric fields do not accept backspace/delete
+        }
         KeyCode::Backspace => {
             form.pop_char();
         }
-        KeyCode::Char('s') if modifiers.contains(KeyModifiers::CONTROL) => {
-            state.try_save_form()?;
+        KeyCode::Char(ch) if is_metric_field(active) => {
+            form.select_metric_by_letter(ch);
         }
         KeyCode::Char(ch) => {
             form.push_char(ch);
@@ -498,6 +765,8 @@ fn handle_confirm_delete_key(
     }
     Ok(())
 }
+
+// ─── Rendering ────────────────────────────────────────────────────────────────
 
 /// Renders the full TUI frame: findings list, detail pane, status bar, and
 /// the form modal overlay when active.
@@ -675,7 +944,10 @@ fn render_form_modal(frame: &mut ratatui::Frame, form: &FormState, area: Rect) {
         .constraints(constraints)
         .split(inner);
 
-    for (idx, label) in FIELD_LABELS.iter().enumerate() {
+    // Compute live CVSS feedback once for the metric block
+    let cvss_feedback = form.cvss_live_feedback();
+
+    for idx in 0..FIELD_COUNT {
         let is_active = idx == form.active_field;
 
         let border_style = if is_active {
@@ -684,26 +956,56 @@ fn render_form_modal(frame: &mut ratatui::Frame, form: &FormState, area: Rect) {
             Style::default().fg(Color::DarkGray)
         };
 
-        let mut content = strip_ansi(&form.buffers[idx]);
+        let label = FIELD_LABELS[idx];
 
-        // Append live CVSS feedback inline after the vector field
-        let cvss_suffix = if idx == FIELD_CVSS_VECTOR {
-            form.cvss_live_feedback()
+        if let Some(slot) = metric_slot(idx) {
+            // Render metric field: `[CURRENT]   opt1 · opt2 · opt3`
+            let descriptor = &CVSS_METRICS[slot];
+            let current = form.metric_fields[slot].current_value(slot);
+            let options_hint = descriptor.options.join(" · ");
+
+            // Build content with current value highlighted
+            let content = format!("[{current}]   {options_hint}");
+
+            // Show CVSS score on the last metric field (A)
+            let full_label = if slot == 7 {
+                match &cvss_feedback {
+                    Some(fb) => format!("{label}   {fb}"),
+                    None => label.to_string(),
+                }
+            } else {
+                label.to_string()
+            };
+
+            let field_block = Block::default()
+                .title(full_label)
+                .borders(Borders::ALL)
+                .border_style(border_style);
+
+            let text_style = if is_active {
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default()
+            };
+
+            let field_widget = Paragraph::new(Span::styled(content, text_style)).block(field_block);
+            frame.render_widget(field_widget, field_areas[idx]);
         } else {
-            None
-        };
+            // Render text field
+            let buf_idx = text_buffer_index(idx)
+                .expect("non-metric field must have a buffer index");
+            let content = strip_ansi(&form.buffers[buf_idx]);
 
-        if let Some(ref feedback) = cvss_suffix {
-            content = format!("{content}  [{feedback}]");
+            let field_block = Block::default()
+                .title(label)
+                .borders(Borders::ALL)
+                .border_style(border_style);
+
+            let field_widget = Paragraph::new(content).block(field_block);
+            frame.render_widget(field_widget, field_areas[idx]);
         }
-
-        let field_block = Block::default()
-            .title(*label)
-            .borders(Borders::ALL)
-            .border_style(border_style);
-
-        let field_widget = Paragraph::new(content).block(field_block);
-        frame.render_widget(field_widget, field_areas[idx]);
     }
 
     // Error line
@@ -717,7 +1019,7 @@ fn render_form_modal(frame: &mut ratatui::Frame, form: &FormState, area: Rect) {
 
     // Hint line
     let hint = Paragraph::new(Span::styled(
-        "Tab/Shift+Tab: move | Ctrl+S: save | Esc: cancel",
+        "Tab/Shift+Tab: move | ←/→: cycle metric | letter: select metric | Ctrl+S: save | Esc: cancel",
         Style::default().fg(Color::DarkGray),
     ))
     .alignment(Alignment::Center);
@@ -747,6 +1049,8 @@ fn render_confirm_delete_overlay(
     frame.render_widget(paragraph, modal_area);
 }
 
+// ─── Layout helpers ───────────────────────────────────────────────────────────
+
 /// Computes a centered rectangle within `area` using percentage dimensions.
 fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
     let vertical = Layout::default()
@@ -767,6 +1071,8 @@ fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
         ])
         .split(vertical[1])[1]
 }
+
+// ─── Display helpers ──────────────────────────────────────────────────────────
 
 /// Returns a short uppercase label string for a given severity.
 fn severity_label(severity: &Severity) -> String {
@@ -835,6 +1141,8 @@ fn strip_ansi(s: &str) -> String {
     out
 }
 
+// ─── Tests ────────────────────────────────────────────────────────────────────
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -881,18 +1189,17 @@ mod tests {
         assert_eq!(strip_ansi(injection), "legitexploited");
     }
 
-    // --- FormState::validate ---
-
-    const VALID_VECTOR: &str = "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H";
+    // --- FormState::validate (updated for metric-based form) ---
 
     fn filled_form() -> FormState {
         let mut form = FormState::new();
-        form.buffers[FIELD_TITLE] = "SQL Injection".to_string();
-        form.buffers[FIELD_CVSS_VECTOR] = VALID_VECTOR.to_string();
-        form.buffers[FIELD_AFFECTED] = "api.example.com".to_string();
-        form.buffers[FIELD_DESCRIPTION] = "Unsanitised user input passed to SQL query.".to_string();
-        form.buffers[FIELD_EVIDENCE] = "Payload: ' OR 1=1--".to_string();
-        form.buffers[FIELD_REMEDIATION] = "Use parameterised queries.".to_string();
+        // Text buffers: 0=Title, 1=Affected, 2=Description, 3=Evidence, 4=Remediation, 5=References
+        form.buffers[0] = "SQL Injection".to_string();
+        form.buffers[1] = "api.example.com".to_string();
+        form.buffers[2] = "Unsanitised user input passed to SQL query.".to_string();
+        form.buffers[3] = "Payload: ' OR 1=1--".to_string();
+        form.buffers[4] = "Use parameterised queries.".to_string();
+        // Metric fields are at their defaults (valid)
         form
     }
 
@@ -905,25 +1212,16 @@ mod tests {
     #[test]
     fn validate_returns_error_when_title_empty() {
         let mut form = filled_form();
-        form.buffers[FIELD_TITLE] = String::new();
+        form.buffers[0] = String::new();
         let result = form.validate();
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Title"));
     }
 
     #[test]
-    fn validate_returns_error_when_cvss_vector_empty() {
-        let mut form = filled_form();
-        form.buffers[FIELD_CVSS_VECTOR] = String::new();
-        let result = form.validate();
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("CVSS Vector"));
-    }
-
-    #[test]
     fn validate_returns_error_when_affected_empty() {
         let mut form = filled_form();
-        form.buffers[FIELD_AFFECTED] = String::new();
+        form.buffers[1] = String::new();
         let result = form.validate();
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Affected"));
@@ -932,7 +1230,7 @@ mod tests {
     #[test]
     fn validate_returns_error_when_description_empty() {
         let mut form = filled_form();
-        form.buffers[FIELD_DESCRIPTION] = String::new();
+        form.buffers[2] = String::new();
         let result = form.validate();
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Description"));
@@ -941,7 +1239,7 @@ mod tests {
     #[test]
     fn validate_returns_error_when_evidence_empty() {
         let mut form = filled_form();
-        form.buffers[FIELD_EVIDENCE] = String::new();
+        form.buffers[3] = String::new();
         let result = form.validate();
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Evidence"));
@@ -950,48 +1248,44 @@ mod tests {
     #[test]
     fn validate_returns_error_when_remediation_empty() {
         let mut form = filled_form();
-        form.buffers[FIELD_REMEDIATION] = String::new();
+        form.buffers[4] = String::new();
         let result = form.validate();
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Remediation"));
     }
 
     #[test]
-    fn validate_returns_error_on_invalid_cvss_vector() {
+    fn validate_allows_empty_references_field() {
         let mut form = filled_form();
-        form.buffers[FIELD_CVSS_VECTOR] = "NOT-A-VECTOR".to_string();
-        let result = form.validate();
-        assert!(result.is_err());
-        let msg = result.unwrap_err();
+        form.buffers[5] = String::new();
+        assert!(form.validate().is_ok());
+    }
+
+    // --- CVSS live feedback (always Some now — metric fields always have a value) ---
+
+    #[test]
+    fn cvss_live_feedback_returns_some_for_default_metrics() {
+        let form = FormState::new();
+        let feedback = form.cvss_live_feedback();
         assert!(
-            msg.contains("Invalid CVSS"),
-            "expected 'Invalid CVSS' in error, got: {msg}"
+            feedback.is_some(),
+            "feedback must be Some — metrics always have a selection"
         );
     }
 
     #[test]
-    fn validate_allows_empty_references_field() {
-        let mut form = filled_form();
-        form.buffers[FIELD_REFERENCES] = String::new();
-        assert!(form.validate().is_ok());
-    }
-
-    // --- CVSS live feedback ---
-
-    #[test]
-    fn cvss_live_feedback_empty_buffer_returns_none() {
+    fn cvss_live_feedback_shows_score_and_severity_for_critical_vector() {
         let mut form = FormState::new();
-        form.buffers[FIELD_CVSS_VECTOR] = String::new();
-        assert!(form.cvss_live_feedback().is_none());
-    }
-
-    #[test]
-    fn cvss_live_feedback_valid_vector_shows_score_and_severity() {
-        let mut form = FormState::new();
-        form.buffers[FIELD_CVSS_VECTOR] = VALID_VECTOR.to_string();
+        // AV:N AC:L PR:N UI:N S:U C:H I:H A:H → 9.8 Critical
+        // AV slot=0: N(default), AC slot=1: L(default), PR slot=2: N(default),
+        // UI slot=3: N(default), S slot=4: U(default),
+        // C slot=5: H(index 2), I slot=6: H(index 2), A slot=7: H(index 2)
+        form.metric_fields[5].selected = 2; // C=H
+        form.metric_fields[6].selected = 2; // I=H
+        form.metric_fields[7].selected = 2; // A=H
         let feedback = form
             .cvss_live_feedback()
-            .expect("feedback must be Some for valid vector");
+            .expect("feedback must be Some");
         assert!(
             feedback.contains("9.8"),
             "expected score 9.8 in: {feedback}"
@@ -1002,24 +1296,176 @@ mod tests {
         );
     }
 
+    // --- Metric field cycling ---
+
     #[test]
-    fn cvss_live_feedback_invalid_vector_shows_warning() {
-        let mut form = FormState::new();
-        form.buffers[FIELD_CVSS_VECTOR] = "INVALID".to_string();
-        let feedback = form
-            .cvss_live_feedback()
-            .expect("feedback must be Some for non-empty buffer");
-        assert!(
-            feedback.contains('⚠'),
-            "expected warning symbol in: {feedback}"
+    fn cycle_metric_field_forward_wraps() {
+        let mut field = MetricField { selected: 3 }; // last option for AV (P)
+        field.cycle_forward(0); // AV has 4 options: N A L P
+        assert_eq!(field.selected, 0, "cycling past last option must wrap to first");
+    }
+
+    #[test]
+    fn cycle_metric_field_backward_wraps() {
+        let mut field = MetricField { selected: 0 }; // first option
+        field.cycle_backward(0); // AV has 4 options
+        assert_eq!(
+            field.selected,
+            3,
+            "cycling before first option must wrap to last"
         );
     }
 
-    // --- new finding round-trip ---
+    #[test]
+    fn letter_press_selects_matching_metric_value() {
+        let mut field = MetricField { selected: 0 }; // AC slot=1, starts at L(0)
+        field.select_by_letter(1, 'H');
+        assert_eq!(
+            field.selected, 1,
+            "pressing H on AC field must select H (index 1)"
+        );
+    }
+
+    #[test]
+    fn invalid_letter_ignored_for_metric_field() {
+        let mut field = MetricField { selected: 0 }; // AV slot=0, starts at N(0)
+        let before = field.selected;
+        field.select_by_letter(0, 'Z');
+        assert_eq!(
+            field.selected, before,
+            "pressing Z on AV field must leave selection unchanged"
+        );
+    }
+
+    // --- Vector assembly ---
+
+    #[test]
+    fn assemble_cvss_vector_from_metric_selections() {
+        let mut form = FormState::new();
+        // Set to AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H (default for most, H for C/I/A)
+        form.metric_fields[5].selected = 2; // C=H
+        form.metric_fields[6].selected = 2; // I=H
+        form.metric_fields[7].selected = 2; // A=H
+        let vector = form.assembled_cvss_vector();
+        assert_eq!(
+            vector,
+            "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
+        );
+    }
+
+    // --- Edit pre-fill from existing vector ---
+
+    #[test]
+    fn edit_prefill_parses_existing_vector_into_metric_fields() {
+        let finding = Finding {
+            id: Uuid::new_v4(),
+            title: "Test".to_string(),
+            cvss_vector: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N".to_string(),
+            cvss_score: 7.5,
+            severity: Severity::High,
+            affected: "host".to_string(),
+            description: "desc".to_string(),
+            evidence: "evidence".to_string(),
+            remediation: "fix".to_string(),
+            references: vec![],
+        };
+
+        let form = FormState::from_finding(&finding);
+
+        // AV=N → slot 0, option index 0
+        assert_eq!(form.metric_fields[0].current_value(0), "N", "AV must be N");
+        // AC=L → slot 1, option index 0
+        assert_eq!(form.metric_fields[1].current_value(1), "L", "AC must be L");
+        // PR=N → slot 2, option index 0
+        assert_eq!(form.metric_fields[2].current_value(2), "N", "PR must be N");
+        // UI=N → slot 3, option index 0
+        assert_eq!(form.metric_fields[3].current_value(3), "N", "UI must be N");
+        // S=U → slot 4, option index 0
+        assert_eq!(form.metric_fields[4].current_value(4), "U", "S must be U");
+        // C=H → slot 5, option index 2
+        assert_eq!(form.metric_fields[5].current_value(5), "H", "C must be H");
+        // I=N → slot 6, option index 0
+        assert_eq!(form.metric_fields[6].current_value(6), "N", "I must be N");
+        // A=N → slot 7, option index 0
+        assert_eq!(form.metric_fields[7].current_value(7), "N", "A must be N");
+    }
+
+    #[test]
+    fn edit_prefill_falls_back_to_defaults_for_invalid_metric_value() {
+        let finding = Finding {
+            id: Uuid::new_v4(),
+            title: "Test".to_string(),
+            // AV:X is not a valid value for AV — should fall back to default (N, index 0)
+            cvss_vector: "CVSS:3.1/AV:X/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:N".to_string(),
+            cvss_score: 0.0,
+            severity: Severity::Informational,
+            affected: "host".to_string(),
+            description: "desc".to_string(),
+            evidence: "evidence".to_string(),
+            remediation: "fix".to_string(),
+            references: vec![],
+        };
+
+        let form = FormState::from_finding(&finding);
+
+        // AV should remain at default (N, index 0) because X is invalid
+        assert_eq!(
+            form.metric_fields[0].selected,
+            CVSS_METRICS[0].default_index,
+            "invalid AV value must leave field at default"
+        );
+    }
+
+    // --- build_finding produces correct vector from metric selections ---
+
+    #[test]
+    fn build_finding_uses_assembled_cvss_vector() {
+        let mut form = filled_form();
+        // Configure metrics to produce AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H = 9.8 Critical
+        form.metric_fields[5].selected = 2; // C=H
+        form.metric_fields[6].selected = 2; // I=H
+        form.metric_fields[7].selected = 2; // A=H
+
+        let finding = form.build_finding().expect("build_finding must succeed");
+        assert_eq!(
+            finding.cvss_vector,
+            "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
+        );
+        assert_eq!(finding.cvss_score, 9.8);
+        assert_eq!(finding.severity, Severity::Critical);
+    }
+
+    // --- validate: metric fields always valid ---
+
+    #[test]
+    fn validate_metric_fields_always_valid() {
+        let mut form = filled_form();
+        // Metric fields are at defaults — validate must pass without any CVSS-related error
+        // (there is no longer a CVSS text field to be empty or malformed)
+        assert!(
+            form.validate().is_ok(),
+            "form with default metric fields must pass validate()"
+        );
+
+        // Even with non-default metric values the form is still valid
+        form.metric_fields[0].selected = 2; // AV=L
+        form.metric_fields[5].selected = 2; // C=H
+        assert!(
+            form.validate().is_ok(),
+            "form with non-default metric fields must still pass validate()"
+        );
+    }
+
+    // --- round-trip new finding ---
 
     #[test]
     fn new_finding_round_trip_computes_correct_score_and_severity() {
-        let form = filled_form();
+        let mut form = filled_form();
+        // AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H = 9.8 Critical
+        form.metric_fields[5].selected = 2; // C=H
+        form.metric_fields[6].selected = 2; // I=H
+        form.metric_fields[7].selected = 2; // A=H
+
         form.validate().expect("form must be valid before building");
         let finding = form
             .build_finding()
@@ -1050,7 +1496,7 @@ mod tests {
     #[test]
     fn new_finding_references_parsed_from_comma_separated_buffer() {
         let mut form = filled_form();
-        form.buffers[FIELD_REFERENCES] = "CVE-2021-1234, https://example.com".to_string();
+        form.buffers[5] = "CVE-2021-1234, https://example.com".to_string();
         let finding = form.build_finding().expect("build_finding must succeed");
         assert_eq!(
             finding.references,
@@ -1064,7 +1510,7 @@ mod tests {
         Finding {
             id: Uuid::new_v4(),
             title: "Original Title".to_string(),
-            cvss_vector: VALID_VECTOR.to_string(),
+            cvss_vector: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H".to_string(),
             cvss_score: 9.8,
             severity: Severity::Critical,
             affected: "host.example.com".to_string(),
@@ -1086,16 +1532,15 @@ mod tests {
     }
 
     #[test]
-    fn edit_form_prefills_all_fields_from_finding() {
+    fn edit_form_prefills_text_fields_from_finding() {
         let finding = sample_finding();
         let form = FormState::from_finding(&finding);
 
-        assert_eq!(form.buffers[FIELD_TITLE], finding.title);
-        assert_eq!(form.buffers[FIELD_CVSS_VECTOR], finding.cvss_vector);
-        assert_eq!(form.buffers[FIELD_AFFECTED], finding.affected);
-        assert_eq!(form.buffers[FIELD_DESCRIPTION], finding.description);
-        assert_eq!(form.buffers[FIELD_EVIDENCE], finding.evidence);
-        assert_eq!(form.buffers[FIELD_REMEDIATION], finding.remediation);
+        assert_eq!(form.buffers[0], finding.title);
+        assert_eq!(form.buffers[1], finding.affected);
+        assert_eq!(form.buffers[2], finding.description);
+        assert_eq!(form.buffers[3], finding.evidence);
+        assert_eq!(form.buffers[4], finding.remediation);
     }
 
     #[test]
@@ -1103,7 +1548,7 @@ mod tests {
         let finding = sample_finding();
         let original_id = finding.id;
         let mut form = FormState::from_finding(&finding);
-        form.buffers[FIELD_TITLE] = "Updated Title".to_string();
+        form.buffers[0] = "Updated Title".to_string();
         let updated = form.build_finding().expect("build_finding must succeed");
         assert_eq!(updated.id, original_id);
     }
@@ -1117,7 +1562,7 @@ mod tests {
         // Open edit form and change the title
         state.open_edit_form();
         let form = state.form.as_mut().expect("form must be open");
-        form.buffers[FIELD_TITLE] = "Updated Title".to_string();
+        form.buffers[0] = "Updated Title".to_string();
 
         // Validate first, then build and update manually (save_session needs real disk)
         let updated_finding = state
@@ -1139,21 +1584,27 @@ mod tests {
     #[test]
     fn edit_finding_recomputes_cvss_score_and_severity() {
         let mut finding = sample_finding();
-        // Start with a medium vector
+        // Start with a medium vector (AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N = 6.5)
         finding.cvss_vector = "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N".to_string();
         finding.cvss_score = 6.5;
         finding.severity = Severity::Medium;
 
         let mut form = FormState::from_finding(&finding);
-        // Change to a critical vector
-        form.buffers[FIELD_CVSS_VECTOR] = VALID_VECTOR.to_string();
+        // PR=L is slot 2, index 1
+        assert_eq!(form.metric_fields[2].current_value(2), "L", "PR must be L after parse");
+
+        // Change PR back to N (index 0) and set C=H, I=H, A=H to get 9.8
+        form.metric_fields[2].selected = 0; // PR=N
+        form.metric_fields[5].selected = 2; // C=H
+        form.metric_fields[6].selected = 2; // I=H
+        form.metric_fields[7].selected = 2; // A=H
 
         let updated = form.build_finding().expect("build_finding must succeed");
         assert_eq!(updated.cvss_score, 9.8);
         assert_eq!(updated.severity, Severity::Critical);
     }
 
-    // --- BLOCK 3: new tests ---
+    // --- Navigation ---
 
     #[test]
     fn focus_next_wraps_from_last_field_to_first() {
@@ -1189,20 +1640,31 @@ mod tests {
     }
 
     #[test]
-    fn push_char_appends_plain_chars_unchanged() {
+    fn push_char_appends_to_text_field_and_ignores_metric_field() {
         let mut form = FormState::new();
+        // Active on Title (text field)
+        form.active_field = FIELD_TITLE;
         form.push_char('h');
-        assert_eq!(form.buffers[FIELD_TITLE], "h");
+        assert_eq!(form.buffers[0], "h");
         form.push_char('i');
-        assert_eq!(form.buffers[FIELD_TITLE], "hi");
-        form.push_char('!');
-        assert_eq!(form.buffers[FIELD_TITLE], "hi!");
+        assert_eq!(form.buffers[0], "hi");
+
+        // Switch to a metric field — push_char must be a no-op
+        form.active_field = FIELD_AV;
+        let av_before = form.metric_fields[0].selected;
+        form.push_char('N');
+        // Buffer unchanged, metric unchanged (push_char ignores metric fields)
+        assert_eq!(form.buffers[0], "hi", "title buffer must be unchanged when active is metric");
+        assert_eq!(
+            form.metric_fields[0].selected, av_before,
+            "push_char must not change metric selection"
+        );
     }
 
     #[test]
     fn build_finding_strips_ansi_from_form_buffers() {
         let mut form = filled_form();
-        form.buffers[FIELD_TITLE] = "Evil\x1b[31mTitle\x1b[0m".to_string();
+        form.buffers[0] = "Evil\x1b[31mTitle\x1b[0m".to_string();
         let finding = form.build_finding().expect("build_finding must succeed");
         assert_eq!(finding.title, "EvilTitle");
     }
@@ -1218,7 +1680,7 @@ mod tests {
         };
         let mut state = TuiState::new(session);
         state.open_new_form();
-        // All buffers are empty — validate will fail on FIELD_TITLE
+        // All text buffers are empty — validate will fail on Title
         state
             .try_save_form()
             .expect("try_save_form must not return Err");
@@ -1234,7 +1696,7 @@ mod tests {
     }
 
     #[test]
-    fn open_new_form_initializes_all_buffers_blank_and_active_field_zero() {
+    fn open_new_form_initializes_text_buffers_blank_and_metrics_at_defaults() {
         let session = Session {
             name: "test-session".to_string(),
             scope: vec![],
@@ -1246,11 +1708,17 @@ mod tests {
         state.open_new_form();
         let form = state.form.as_ref().expect("form must be open");
         assert_eq!(form.active_field, FIELD_TITLE);
-        for idx in 0..FIELD_COUNT {
+        for (buf_idx, buf) in form.buffers.iter().enumerate() {
             assert!(
-                form.buffers[idx].is_empty(),
-                "buffer[{idx}] must be empty on new form, got: {:?}",
-                form.buffers[idx]
+                buf.is_empty(),
+                "buffer[{buf_idx}] must be empty on new form, got: {buf:?}"
+            );
+        }
+        for (slot, mf) in form.metric_fields.iter().enumerate() {
+            assert_eq!(
+                mf.selected,
+                CVSS_METRICS[slot].default_index,
+                "metric_fields[{slot}] must be at default on new form"
             );
         }
     }
