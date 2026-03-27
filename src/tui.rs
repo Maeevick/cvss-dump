@@ -186,7 +186,7 @@ impl FormState {
             FormMode::Edit(id) => *id,
         };
 
-        Finding {
+        Ok(Finding {
             id,
             title: strip_ansi(self.buffers[FIELD_TITLE].trim()),
             cvss_vector: vector,
@@ -197,7 +197,7 @@ impl FormState {
             evidence: strip_ansi(self.buffers[FIELD_EVIDENCE].trim()),
             remediation: strip_ansi(self.buffers[FIELD_REMEDIATION].trim()),
             references,
-        }
+        })
     }
 }
 
