@@ -250,3 +250,91 @@ fn detail_line<'a>(label: &'a str, value: &'a str) -> Line<'a> {
         Span::raw(value),
     ])
 }
+
+/// Removes ANSI/VT escape sequences from `s`.
+///
+/// Handles:
+/// - CSI sequences: `ESC [` + parameter bytes (0x30–0x3F) + intermediate bytes (0x20–0x2F)
+///   + final byte (0x40–0x7E).
+/// - Simple two-byte sequences: `ESC` + any byte in range 0x40–0x5F (e.g. `ESC M`).
+/// - All other characters are left unchanged.
+fn strip_ansi(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let len = bytes.len();
+    let mut out = String::with_capacity(len);
+    let mut i = 0;
+    while i < len {
+        if bytes[i] == b'\x1b' && i + 1 < len {
+            let next = bytes[i + 1];
+            if next == b'[' {
+                // CSI sequence: skip ESC [, then parameter, intermediate, and final bytes
+                i += 2;
+                while i < len && (0x30..=0x3f).contains(&bytes[i]) {
+                    i += 1;
+                }
+                while i < len && (0x20..=0x2f).contains(&bytes[i]) {
+                    i += 1;
+                }
+                if i < len && (0x40..=0x7e).contains(&bytes[i]) {
+                    i += 1;
+                }
+            } else if (0x40..=0x5f).contains(&next) {
+                // Simple two-byte escape sequence
+                i += 2;
+            } else {
+                out.push(bytes[i] as char);
+                i += 1;
+            }
+        } else {
+            // SAFETY: only ascii-range control byte handling above; push char by char
+            // to stay correct for multibyte UTF-8 sequences
+            let ch = s[i..].chars().next().unwrap_or('\0');
+            out.push(ch);
+            i += ch.len_utf8();
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::strip_ansi;
+
+    #[test]
+    fn strip_ansi_leaves_plain_text_unchanged() {
+        assert_eq!(strip_ansi("hello world"), "hello world");
+    }
+
+    #[test]
+    fn strip_ansi_removes_csi_color_sequence() {
+        assert_eq!(strip_ansi("\x1b[31mred\x1b[0m"), "red");
+    }
+
+    #[test]
+    fn strip_ansi_removes_csi_with_multiple_params() {
+        assert_eq!(strip_ansi("\x1b[1;32mbold green\x1b[0m"), "bold green");
+    }
+
+    #[test]
+    fn strip_ansi_removes_simple_two_byte_sequence() {
+        // ESC M (reverse index) is a 0x4D byte — within 0x40..=0x5F
+        assert_eq!(strip_ansi("\x1bMtext"), "text");
+    }
+
+    #[test]
+    fn strip_ansi_preserves_lone_escape_not_followed_by_valid_byte() {
+        // ESC followed by a byte outside both ranges — keep the ESC
+        assert_eq!(strip_ansi("\x1b\x01plain"), "\x1b\x01plain");
+    }
+
+    #[test]
+    fn strip_ansi_preserves_unicode_outside_sequences() {
+        assert_eq!(strip_ansi("caf\u{e9}"), "caf\u{e9}");
+    }
+
+    #[test]
+    fn strip_ansi_removes_embedded_injection_attempt() {
+        let injection = "legit\x1b[2J\x1b[Hexploited";
+        assert_eq!(strip_ansi(injection), "legitexploited");
+    }
+}
