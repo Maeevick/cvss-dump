@@ -1092,47 +1092,21 @@ mod tests {
 
     #[test]
     fn push_char_strips_ansi_escape_sequences() {
-        // A lone ESC is preserved by strip_ansi (no valid continuation byte).
-        // Use a complete CSI sequence ESC [ m which strip_ansi removes entirely.
+        // push_char calls strip_ansi on the single-char string before appending.
+        // A lone ESC has no continuation byte, so strip_ansi preserves it.
+        // Verify: pushing a normal char appends it, pushing lone ESC also appends it
+        // (strip_ansi does not strip a lone ESC — that matches the documented behaviour).
         let mut form = FormState::new();
-        // Push ESC, '[', 'm' as individual chars — only ESC is the char variant
-        // but push_char takes a single char and strips; build the sequence via
-        // direct buffer manipulation to test strip_ansi integration:
-        // Instead, call push_char for each char in "\x1b[m":
+        form.push_char('a');
+        assert_eq!(form.buffers[FIELD_TITLE], "a");
+        // A lone ESC byte passed to strip_ansi is kept (no valid continuation in the string).
         form.push_char('\x1b');
+        assert_eq!(form.buffers[FIELD_TITLE], "a\x1b");
+        // Verify strip_ansi integration: push_char on '[' and 'm' — they are plain bytes kept.
         form.push_char('[');
         form.push_char('m');
-        // strip_ansi on "\x1b" keeps it (lone ESC), but on "\x1b[m" (CSI sequence) strips it.
-        // Since push_char calls strip_ansi per char individually, each char is pushed independently.
-        // '\x1b' alone → strip_ansi("\x1b") → lone ESC kept → buffer gets "\x1b"
-        // '[' alone → kept → buffer gets "\x1b["
-        // 'm' alone → kept → buffer gets "\x1b[m"
-        // The complete stripping only happens when the full sequence is in one string.
-        // To test the actual sequence stripping: push the whole sequence as a string
-        // by setting the buffer directly and verifying strip_ansi behaviour, or
-        // test push_char with a single char that strip_ansi would strip.
-        // ESC M (0x4D) is a two-byte simple escape sequence — strip_ansi strips it
-        // when the full string "\x1bM" is passed. But push_char('\x1b') passes "\x1b"
-        // alone, and the lone ESC is not stripped.
-        //
-        // The correct test: call push_char on each byte of the CSI sequence but note
-        // that strip_ansi works on the per-char string. A single '\x1b' string has
-        // no following byte so it is preserved. Therefore, verify the buffer is
-        // "\x1b[m" (three chars preserved individually, not stripped as a unit).
-        //
-        // Instead: test that pushing the full sequence at once via a helper that
-        // exercises strip_ansi as a unit — this is already covered by strip_ansi tests.
-        // The meaningful push_char test is: pushing a char that strip_ansi removes
-        // in isolation. Since strip_ansi only strips ESC when followed by a valid
-        // continuation, no single char is stripped in isolation except via the
-        // else branch. Use the direct buffer to verify strip_ansi is called:
-        let mut form2 = FormState::new();
-        // Verify push_char on normal char works and on ESC alone does not crash
-        form2.push_char('a');
-        assert_eq!(form2.buffers[FIELD_TITLE], "a");
-        // ESC alone is preserved (lone ESC with no continuation is kept by strip_ansi)
-        form2.push_char('\x1b');
-        assert_eq!(form2.buffers[FIELD_TITLE], "a\x1b");
+        // All four chars appended individually — no multi-char sequence to strip.
+        assert_eq!(form.buffers[FIELD_TITLE], "a\x1b[m");
     }
 
     #[test]
