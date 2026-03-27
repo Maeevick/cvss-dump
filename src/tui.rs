@@ -129,8 +129,11 @@ const REQUIRED_TEXT_FIELD_INDICES: [usize; 5] = [
 /// Descriptor for a single CVSS metric field: its key abbreviation and the
 /// ordered list of valid option codes.
 pub struct MetricDescriptor {
+    /// The CVSS metric key used in the vector string (e.g. `"AV"`, `"AC"`).
     pub key: &'static str,
+    /// The valid option codes for this metric in selection order (e.g. `["N", "A", "L", "P"]`).
     pub options: &'static [&'static str],
+    /// Index into `options` for the default selection when a new finding is created.
     pub default_index: usize,
 }
 
