@@ -993,8 +993,8 @@ fn render_form_modal(frame: &mut ratatui::Frame, form: &FormState, area: Rect) {
             frame.render_widget(field_widget, field_areas[idx]);
         } else {
             // Render text field
-            let buf_idx =
-                text_buffer_index(idx).expect("non-metric field must have a buffer index");
+            let buf_idx = text_buffer_index(idx)
+                .unwrap_or_else(|| unreachable!("non-metric field must have a buffer index"));
             let content = strip_ansi(&form.buffers[buf_idx]);
 
             let field_block = Block::default()
