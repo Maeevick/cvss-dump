@@ -173,10 +173,7 @@ mod tests {
 
     fn unique_temp_dir() -> PathBuf {
         let mut path = std::env::temp_dir();
-        path.push(format!(
-            "cvss-dump-test-{}",
-            uuid::Uuid::new_v4().to_string()
-        ));
+        path.push(format!("cvss-dump-test-{}", uuid::Uuid::new_v4()));
         path
     }
 
