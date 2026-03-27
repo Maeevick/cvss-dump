@@ -40,7 +40,10 @@ pub struct TuiState {
 impl TuiState {
     /// Creates a new `TuiState` for the given session with no finding selected.
     fn new(session: Session) -> Self {
-        Self { session, selected: 0 }
+        Self {
+            session,
+            selected: 0,
+        }
     }
 
     /// Moves the selection one row down, wrapping to the start when past the end.
@@ -84,10 +87,9 @@ pub fn run_tui(session: Session) -> Result<(), Box<dyn std::error::Error>> {
 
     let (width, height) = crossterm::terminal::size()?;
     if width < MIN_WIDTH || height < MIN_HEIGHT {
-        return Err(format!(
-            "Terminal too small. Minimum size: {MIN_WIDTH}\u{d7}{MIN_HEIGHT}."
-        )
-        .into());
+        return Err(
+            format!("Terminal too small. Minimum size: {MIN_WIDTH}\u{d7}{MIN_HEIGHT}.").into(),
+        );
     }
 
     let mut state = TuiState::new(session);
@@ -143,11 +145,7 @@ fn render(frame: &mut ratatui::Frame, state: &TuiState) {
 }
 
 /// Renders the left pane with the findings list.
-fn render_findings_list(
-    frame: &mut ratatui::Frame,
-    state: &TuiState,
-    area: ratatui::layout::Rect,
-) {
+fn render_findings_list(frame: &mut ratatui::Frame, state: &TuiState, area: ratatui::layout::Rect) {
     let block = Block::default().title("Findings").borders(Borders::ALL);
 
     if state.session.findings.is_empty() {
@@ -197,12 +195,14 @@ fn render_detail(frame: &mut ratatui::Frame, state: &TuiState, area: ratatui::la
             } else {
                 finding.references.join(", ")
             };
+            let score_str = format!("{:.1}", finding.cvss_score);
+            let severity_str = severity_label(&finding.severity);
 
             let lines: Vec<Line> = vec![
                 detail_line("Title", &finding.title),
                 detail_line("CVSS Vector", &finding.cvss_vector),
-                detail_line("Score", &format!("{:.1}", finding.cvss_score)),
-                detail_line("Severity", &severity_label(&finding.severity)),
+                detail_line("Score", &score_str),
+                detail_line("Severity", &severity_str),
                 detail_line("Affected", &finding.affected),
                 Line::raw(""),
                 detail_line("Description", &finding.description),
