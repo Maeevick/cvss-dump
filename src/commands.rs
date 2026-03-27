@@ -17,7 +17,10 @@ fn prompt_line(prompt: &str) -> Result<String, Box<dyn std::error::Error>> {
     stdout().flush()?;
     let mut buf = String::new();
     stdin().read_line(&mut buf)?;
-    Ok(buf.trim_end_matches('\n').trim_end_matches('\r').to_string())
+    Ok(buf
+        .trim_end_matches('\n')
+        .trim_end_matches('\r')
+        .to_string())
 }
 
 /// Handles the `new` subcommand — creates a new pentest session.
@@ -83,10 +86,88 @@ pub fn cmd_open(session: &str) -> Result<(), Box<dyn std::error::Error>> {
     Err(Box::from("not yet implemented"))
 }
 
+/// A single row of data collected for the session list table.
+struct SessionRow {
+    name: String,
+    findings: String,
+    created: String,
+}
+
 /// Handles the `list` subcommand — lists all recorded sessions.
+///
+/// Prints a left-aligned table of sessions sorted alphabetically.
+/// Columns: Name | Findings | Created.
+/// If a session file cannot be loaded, its row shows `<corrupted>` and `unknown`
+/// rather than aborting the entire listing.
 pub fn cmd_list() -> Result<(), Box<dyn std::error::Error>> {
-    eprintln!("Not yet implemented: list");
-    Err(Box::from("not yet implemented"))
+    let names = storage::list_sessions().map_err(|e| {
+        eprintln!("Error listing sessions: {e}");
+        Box::new(e) as Box<dyn std::error::Error>
+    })?;
+
+    if names.is_empty() {
+        println!("No sessions found.");
+        return Ok(());
+    }
+
+    let rows: Vec<SessionRow> = names
+        .iter()
+        .map(|name| match storage::load_session(name) {
+            Ok(session) => SessionRow {
+                name: name.clone(),
+                findings: session.findings.len().to_string(),
+                created: session.created_at.format("%Y-%m-%d").to_string(),
+            },
+            Err(_) => SessionRow {
+                name: name.clone(),
+                findings: "<corrupted>".to_string(),
+                created: "unknown".to_string(),
+            },
+        })
+        .collect();
+
+    let col_name = "Name";
+    let col_findings = "Findings";
+    let col_created = "Created";
+
+    let name_width = rows
+        .iter()
+        .map(|r| r.name.len())
+        .max()
+        .unwrap_or(0)
+        .max(col_name.len());
+    let findings_width = rows
+        .iter()
+        .map(|r| r.findings.len())
+        .max()
+        .unwrap_or(0)
+        .max(col_findings.len());
+    let created_width = rows
+        .iter()
+        .map(|r| r.created.len())
+        .max()
+        .unwrap_or(0)
+        .max(col_created.len());
+
+    println!(
+        "{:<name_width$}  {:<findings_width$}  {:<created_width$}",
+        col_name, col_findings, col_created
+    );
+    println!(
+        "{:<name_width$}  {:<findings_width$}  {:<created_width$}",
+        "-".repeat(name_width),
+        "-".repeat(findings_width),
+        "-".repeat(created_width)
+    );
+
+    for row in &rows {
+        println!(
+            "{:<name_width$}  {:<findings_width$}  {:<created_width$}",
+            row.name, row.findings, row.created
+        );
+    }
+
+    Ok(())
 }
 
 /// Handles the `report` subcommand — exports a session to a markdown report.
