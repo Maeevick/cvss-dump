@@ -219,6 +219,10 @@ pub struct TuiState {
     pub selected: usize,
     /// When `Some`, the modal form is open.
     pub form: Option<FormState>,
+    /// Transient status message shown in the status bar instead of the hint line.
+    pub status_message: Option<String>,
+    /// Countdown in render cycles before `status_message` is cleared.
+    pub message_ticks: u8,
 }
 
 impl TuiState {
@@ -228,6 +232,24 @@ impl TuiState {
             session,
             selected: 0,
             form: None,
+            status_message: None,
+            message_ticks: 0,
+        }
+    }
+
+    /// Sets a transient status message that clears after `ticks` render cycles.
+    fn set_status_message(&mut self, msg: impl Into<String>, ticks: u8) {
+        self.status_message = Some(msg.into());
+        self.message_ticks = ticks;
+    }
+
+    /// Decrements `message_ticks` and clears `status_message` when it reaches zero.
+    fn tick_status_message(&mut self) {
+        if self.message_ticks > 0 {
+            self.message_ticks -= 1;
+            if self.message_ticks == 0 {
+                self.status_message = None;
+            }
         }
     }
 
