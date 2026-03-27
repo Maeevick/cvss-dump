@@ -1402,25 +1402,16 @@ mod tests {
 
     #[test]
     fn delete_last_item_in_multi_item_list_clamps_selected_to_new_len_minus_one() {
-        let session = session_with_two_findings();
+        let mut session = session_with_two_findings();
+        session.name = format!("test-delete-{}", Uuid::new_v4().simple());
         let mut state = TuiState::new(session);
         // Select the last item (index 1)
         state.selected = 1;
 
-        state.confirm_delete = Some(ConfirmDeleteState {
-            finding_index: 1,
-            safe_title: "Second Finding".to_string(),
-        });
-
-        let idx = state.confirm_delete.as_ref().unwrap().finding_index;
-        state.session.findings.remove(idx);
-        let count = state.session.findings.len();
-        if count == 0 {
-            state.selected = 0;
-        } else if state.selected >= count {
-            state.selected = count - 1;
-        }
-        state.confirm_delete = None;
+        state.open_confirm_delete();
+        state
+            .execute_confirmed_delete()
+            .expect("execute_confirmed_delete must not error");
 
         assert_eq!(state.session.findings.len(), 1, "one finding must remain");
         assert_eq!(
