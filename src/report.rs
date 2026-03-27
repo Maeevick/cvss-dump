@@ -283,20 +283,24 @@ mod tests {
 
     #[test]
     fn cmd_report_empty_findings_returns_err_with_message() {
-        let session = make_session("empty-session", vec!["10.0.0.1"], vec![]);
+        use crate::commands::cmd_report;
+        use crate::storage;
+        use std::fs;
 
-        // generate_report is only called when findings are non-empty.
-        // The guard lives in cmd_report — test the guard message directly.
-        let name = "empty-session";
-        let expected_msg =
-            format!("Session '{name}' has no findings. Add findings before exporting.");
-        assert_eq!(
-            expected_msg,
-            "Session 'empty-session' has no findings. Add findings before exporting."
+        let name = format!("report-empty-{}", Uuid::new_v4().simple());
+        let session = make_session(&name, vec!["10.0.0.1"], vec![]);
+
+        storage::save_session(&session).expect("save_session must succeed for test setup");
+
+        let result = cmd_report(&name);
+
+        let dir = storage::storage_dir().expect("storage_dir must succeed");
+        let _ = fs::remove_file(dir.join(format!("{name}.json")));
+
+        let err = result.expect_err("cmd_report must return Err for a session with no findings");
+        assert!(
+            err.to_string().contains("has no findings"),
+            "error message must mention 'has no findings', got: {err}"
         );
-
-        // Also verify sorted_findings on empty input does not panic.
-        let ordered = super::sorted_findings(&session.findings);
-        assert!(ordered.is_empty());
     }
 }
