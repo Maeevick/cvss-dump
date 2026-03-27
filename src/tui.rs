@@ -309,6 +309,47 @@ impl TuiState {
         self.form = None;
     }
 
+    /// Opens the delete confirmation overlay for the currently selected finding.
+    /// Sets a status message when no finding is selected.
+    fn open_confirm_delete(&mut self) {
+        if let Some(finding) = self.selected_finding() {
+            let safe_title = strip_ansi(&finding.title);
+            self.confirm_delete = Some(ConfirmDeleteState {
+                finding_index: self.selected,
+                safe_title,
+            });
+        } else {
+            self.set_status_message("No finding selected — use j/k to navigate.", 5);
+        }
+    }
+
+    /// Closes the delete confirmation overlay without deleting.
+    fn close_confirm_delete(&mut self) {
+        self.confirm_delete = None;
+    }
+
+    /// Executes the deletion confirmed by the overlay: removes the finding,
+    /// clamps `selected`, refreshes `updated_at`, and persists the session.
+    fn execute_confirmed_delete(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        let idx = match &self.confirm_delete {
+            Some(c) => c.finding_index,
+            None => return Ok(()),
+        };
+        if idx < self.session.findings.len() {
+            self.session.findings.remove(idx);
+            let count = self.session.findings.len();
+            if count == 0 {
+                self.selected = 0;
+            } else if self.selected >= count {
+                self.selected = count - 1;
+            }
+            self.session.updated_at = chrono::Utc::now();
+            save_session(&self.session)?;
+        }
+        self.confirm_delete = None;
+        Ok(())
+    }
+
     /// Attempts to save the current form. On validation failure, sets the
     /// error message on the form and keeps it open. On success, persists the
     /// session and closes the form.
