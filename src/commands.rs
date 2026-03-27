@@ -190,8 +190,15 @@ pub fn cmd_list() -> Result<(), Box<dyn std::error::Error>> {
 /// markdown content, and writes it atomically to `<session>-report.md` in the
 /// current working directory.
 pub fn cmd_report(name: &str) -> Result<(), Box<dyn std::error::Error>> {
+    if !is_valid_slug(name) {
+        return Err(Box::from(format!(
+            "Invalid session name '{}'. Session names must be alphanumeric and hyphens only.",
+            name
+        )));
+    }
+
     let session = match storage::load_session(name) {
-        Ok(s) => s,
+        Ok(session) => session,
         Err(storage::StorageError::SessionNotFound(_)) => {
             return Err(Box::from(format!(
                 "Session '{name}' not found. Run 'cvss-dump list' to see available sessions."
