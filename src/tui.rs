@@ -244,6 +244,7 @@ impl TuiState {
             session,
             selected: 0,
             form: None,
+            confirm_delete: None,
             status_message: None,
             message_ticks: 0,
         }
