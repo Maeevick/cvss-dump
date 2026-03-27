@@ -282,10 +282,12 @@ impl TuiState {
     }
 
     /// Opens the edit form pre-filled with the currently selected finding.
-    /// Does nothing when no finding is selected.
+    /// Sets a status message when no finding is selected.
     fn open_edit_form(&mut self) {
         if let Some(finding) = self.selected_finding() {
             self.form = Some(FormState::from_finding(finding));
+        } else {
+            self.set_status_message("No finding selected — use j/k to navigate.", 5);
         }
     }
 
