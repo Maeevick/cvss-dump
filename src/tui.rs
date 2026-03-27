@@ -365,7 +365,7 @@ pub fn run_tui(session: Session) -> Result<(), Box<dyn std::error::Error>> {
     let mut state = TuiState::new(session);
 
     loop {
-        terminal.draw(|frame| render(frame, &state))?;
+        terminal.draw(|frame| render(frame, &mut state))?;
 
         if event::poll(std::time::Duration::from_millis(200))? {
             if let Event::Key(key) = event::read()? {
