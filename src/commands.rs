@@ -215,11 +215,30 @@ pub fn cmd_report(name: &str) -> Result<(), Box<dyn std::error::Error>> {
         )));
     }
 
-    let session = match storage::load_session(name) {
+    let dir = storage::storage_dir().map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+    cmd_report_from(name, &dir)
+}
+
+/// Testable variant of `cmd_report` that loads from `base_dir` and writes the report
+/// to the current working directory.
+pub fn cmd_report_from(
+    name: &str,
+    base_dir: &std::path::Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let session = match storage::load_session_from(name, base_dir) {
         Ok(session) => session,
         Err(storage::StorageError::SessionNotFound(_)) => {
             return Err(Box::from(format!(
                 "Session '{name}' not found. Run 'cvss-dump list' to see available sessions."
+            )));
+        }
+        Err(storage::StorageError::CorruptedJson(_)) => {
+            let path = base_dir
+                .join(format!("{name}.json"))
+                .display()
+                .to_string();
+            return Err(Box::from(format!(
+                "Session '{name}' is corrupted ({path}). Run 'cvss-dump repair {name}' to attempt recovery."
             )));
         }
         Err(e) => return Err(Box::new(e)),
