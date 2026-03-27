@@ -953,7 +953,7 @@ mod tests {
     fn new_finding_references_parsed_from_comma_separated_buffer() {
         let mut form = filled_form();
         form.buffers[FIELD_REFERENCES] = "CVE-2021-1234, https://example.com".to_string();
-        let finding = form.build_finding();
+        let finding = form.build_finding().expect("build_finding must succeed");
         assert_eq!(
             finding.references,
             vec!["CVE-2021-1234", "https://example.com"]
