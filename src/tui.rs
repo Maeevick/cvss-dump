@@ -1302,25 +1302,20 @@ mod tests {
     #[test]
     fn confirm_y_removes_finding_from_session_and_closes_overlay() {
         let finding = sample_finding();
-        let session = session_with_finding(finding.clone());
+        let mut session = session_with_finding(finding.clone());
+        session.name = format!("test-delete-{}", Uuid::new_v4());
         let mut state = TuiState::new(session);
 
-        state.confirm_delete = Some(ConfirmDeleteState {
-            finding_index: 0,
-            safe_title: finding.title.clone(),
-        });
+        state.selected = 0;
+        state.open_confirm_delete();
+        assert!(
+            state.confirm_delete.is_some(),
+            "confirm_delete must be open before executing delete"
+        );
 
-        // execute_confirmed_delete calls save_session which writes to disk.
-        // We exercise only the in-memory state changes by operating directly.
-        let idx = state.confirm_delete.as_ref().unwrap().finding_index;
-        state.session.findings.remove(idx);
-        let count = state.session.findings.len();
-        if count == 0 {
-            state.selected = 0;
-        } else if state.selected >= count {
-            state.selected = count - 1;
-        }
-        state.confirm_delete = None;
+        state
+            .execute_confirmed_delete()
+            .expect("execute_confirmed_delete must not error");
 
         assert_eq!(state.session.findings.len(), 0, "finding must be removed");
         assert!(
@@ -1432,11 +1427,7 @@ mod tests {
         }
         state.confirm_delete = None;
 
-        assert_eq!(
-            state.session.findings.len(),
-            1,
-            "one finding must remain"
-        );
+        assert_eq!(state.session.findings.len(), 1, "one finding must remain");
         assert_eq!(
             state.selected, 0,
             "selected must be clamped to new len-1 (0)"
