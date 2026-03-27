@@ -212,6 +212,15 @@ impl Drop for TerminalGuard {
     }
 }
 
+/// State for the delete confirmation overlay.
+#[derive(Debug, Clone)]
+pub struct ConfirmDeleteState {
+    /// Index into `session.findings` of the finding to delete.
+    pub finding_index: usize,
+    /// ANSI-stripped title of the finding, shown in the prompt.
+    pub safe_title: String,
+}
+
 /// Holds the runtime state of the TUI session.
 pub struct TuiState {
     /// The session being viewed and managed.
@@ -220,6 +229,8 @@ pub struct TuiState {
     pub selected: usize,
     /// When `Some`, the modal form is open.
     pub form: Option<FormState>,
+    /// When `Some`, the delete confirmation overlay is open.
+    pub confirm_delete: Option<ConfirmDeleteState>,
     /// Transient status message shown in the status bar instead of the hint line.
     pub status_message: Option<String>,
     /// Countdown in render cycles before `status_message` is cleared.
