@@ -1,8 +1,10 @@
+use std::fs;
 use std::io::{Write, stdin, stdout};
 
 use chrono::Utc;
 
 use crate::domain::Session;
+use crate::report;
 use crate::storage;
 use crate::tui;
 
