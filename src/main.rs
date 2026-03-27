@@ -1,5 +1,6 @@
 mod cvss;
 mod domain;
+mod storage;
 
 use clap::{Parser, Subcommand};
 
