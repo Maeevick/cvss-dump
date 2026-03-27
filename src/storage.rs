@@ -115,16 +115,6 @@ fn ensure_dir_exists(path: &Path) -> Result<(), StorageError> {
     fs::create_dir_all(path).map_err(StorageError::DirectoryCreationFailed)
 }
 
-/// Returns a display string for the file path of a session, used in error messages.
-///
-/// Does not check whether the file exists. Safe to call for missing or corrupted sessions.
-pub fn session_file_path_display(name: &str) -> String {
-    match session_path(name) {
-        Ok(path) => path.display().to_string(),
-        Err(_) => format!("~/.cvss-dump/sessions/{name}.json"),
-    }
-}
-
 // --- testable core ----------------------------------------------------------
 
 /// Serialises `session` to JSON and writes it atomically into `base_dir`.

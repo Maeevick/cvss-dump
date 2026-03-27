@@ -233,10 +233,7 @@ pub fn cmd_report_from(
             )));
         }
         Err(storage::StorageError::CorruptedJson(_)) => {
-            let path = base_dir
-                .join(format!("{name}.json"))
-                .display()
-                .to_string();
+            let path = base_dir.join(format!("{name}.json")).display().to_string();
             return Err(Box::from(format!(
                 "Session '{name}' is corrupted ({path}). Run 'cvss-dump repair {name}' to attempt recovery."
             )));
@@ -383,9 +380,7 @@ mod tests {
         let msg = result.unwrap_err().to_string();
         assert_eq!(
             msg,
-            format!(
-                "Session '{session_name}' has no findings. Add findings before exporting."
-            )
+            format!("Session '{session_name}' has no findings. Add findings before exporting.")
         );
     }
 
