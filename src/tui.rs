@@ -432,7 +432,9 @@ fn handle_form_key(
 
 /// Renders the full TUI frame: findings list, detail pane, status bar, and
 /// the form modal overlay when active.
-fn render(frame: &mut ratatui::Frame, state: &TuiState) {
+fn render(frame: &mut ratatui::Frame, state: &mut TuiState) {
+    state.tick_status_message();
+
     let area = frame.area();
 
     let vertical = Layout::default()
@@ -453,7 +455,7 @@ fn render(frame: &mut ratatui::Frame, state: &TuiState) {
 
     render_findings_list(frame, state, list_area);
     render_detail(frame, state, detail_area);
-    render_status_bar(frame, status_area);
+    render_status_bar(frame, state, status_area);
 
     if let Some(form) = &state.form {
         render_form_modal(frame, form, area);
