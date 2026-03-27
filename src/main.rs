@@ -1,3 +1,4 @@
+mod commands;
 mod cvss;
 mod domain;
 mod storage;
@@ -30,24 +31,20 @@ enum Commands {
 }
 
 fn main() {
+    if let Err(e) = run() {
+        eprintln!("Error: {e}");
+        std::process::exit(1);
+    }
+}
+
+/// Parses CLI arguments and dispatches to the appropriate command handler.
+fn run() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::New => {
-            println!("Creating new session...");
-            // TODO: Implement interactive session creation
-        }
-        Commands::Open { session } => {
-            println!("Opening session: {}", session);
-            // TODO: Implement TUI session opening
-        }
-        Commands::List => {
-            println!("Listing sessions...");
-            // TODO: Implement session listing
-        }
-        Commands::Report { session } => {
-            println!("Generating report for session: {}", session);
-            // TODO: Implement markdown report generation
-        }
+        Commands::New => commands::cmd_new(),
+        Commands::Open { session } => commands::cmd_open(&session),
+        Commands::List => commands::cmd_list(),
+        Commands::Report { session } => commands::cmd_report(&session),
     }
 }
