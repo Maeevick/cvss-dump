@@ -1379,24 +1379,15 @@ mod tests {
     #[test]
     fn delete_only_finding_results_in_empty_session_and_selected_zero() {
         let finding = sample_finding();
-        let session = session_with_finding(finding.clone());
+        let mut session = session_with_finding(finding.clone());
+        session.name = format!("test-delete-{}", Uuid::new_v4().simple());
         let mut state = TuiState::new(session);
         state.selected = 0;
 
-        state.confirm_delete = Some(ConfirmDeleteState {
-            finding_index: 0,
-            safe_title: finding.title.clone(),
-        });
-
-        let idx = state.confirm_delete.as_ref().unwrap().finding_index;
-        state.session.findings.remove(idx);
-        let count = state.session.findings.len();
-        if count == 0 {
-            state.selected = 0;
-        } else if state.selected >= count {
-            state.selected = count - 1;
-        }
-        state.confirm_delete = None;
+        state.open_confirm_delete();
+        state
+            .execute_confirmed_delete()
+            .expect("execute_confirmed_delete must not error");
 
         assert_eq!(
             state.session.findings.len(),
