@@ -220,6 +220,20 @@ mod tests {
     }
 
     #[test]
+    fn list_sessions_skips_files_with_invalid_stems() {
+        let dir = unique_temp_dir();
+        fs::create_dir_all(&dir).unwrap();
+
+        fs::write(dir.join("invalid name.json"), b"{}").unwrap();
+        fs::write(dir.join("evil\x1b[31m.json"), b"{}").unwrap();
+        save_session_to(&temp_session("valid"), &dir).unwrap();
+
+        let names = list_sessions_in(&dir).expect("list must succeed");
+
+        assert_eq!(names, vec!["valid"]);
+    }
+
+    #[test]
     fn load_non_existent_session_returns_not_found() {
         let dir = unique_temp_dir();
 
