@@ -287,7 +287,13 @@ impl TuiState {
                 Ok(())
             }
             Ok(()) => {
-                let finding = form.build_finding();
+                let finding = match form.build_finding() {
+                    Ok(f) => f,
+                    Err(msg) => {
+                        form.error = Some(msg);
+                        return Ok(());
+                    }
+                };
                 match &form.mode {
                     FormMode::New => {
                         self.session.findings.push(finding);
