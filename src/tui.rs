@@ -486,6 +486,19 @@ fn handle_form_key(
     Ok(())
 }
 
+/// Handles a key event while the delete confirmation overlay is open.
+fn handle_confirm_delete_key(
+    state: &mut TuiState,
+    code: KeyCode,
+) -> Result<(), Box<dyn std::error::Error>> {
+    match code {
+        KeyCode::Char('y') => state.execute_confirmed_delete()?,
+        KeyCode::Char('n') | KeyCode::Esc => state.close_confirm_delete(),
+        _ => {}
+    }
+    Ok(())
+}
+
 /// Renders the full TUI frame: findings list, detail pane, status bar, and
 /// the form modal overlay when active.
 fn render(frame: &mut ratatui::Frame, state: &mut TuiState) {
