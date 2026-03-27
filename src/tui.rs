@@ -340,7 +340,13 @@ impl FormState {
     /// Assembles the CVSS v3.1 vector string from the 8 metric selections.
     pub fn assembled_cvss_vector(&self) -> String {
         let parts: Vec<String> = (0..8)
-            .map(|i| format!("{}:{}", CVSS_METRICS[i].key, self.metric_fields[i].current_value(i)))
+            .map(|i| {
+                format!(
+                    "{}:{}",
+                    CVSS_METRICS[i].key,
+                    self.metric_fields[i].current_value(i)
+                )
+            })
             .collect();
         format!("CVSS:3.1/{}", parts.join("/"))
     }
