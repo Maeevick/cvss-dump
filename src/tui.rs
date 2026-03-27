@@ -529,6 +529,10 @@ fn render(frame: &mut ratatui::Frame, state: &mut TuiState) {
     if let Some(form) = &state.form {
         render_form_modal(frame, form, area);
     }
+
+    if let Some(confirm) = &state.confirm_delete {
+        render_confirm_delete_overlay(frame, confirm, area);
+    }
 }
 
 /// Renders the left pane with the findings list.
