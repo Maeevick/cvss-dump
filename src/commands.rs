@@ -81,10 +81,21 @@ pub fn cmd_new() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Handles the `open` subcommand — opens an existing session in the TUI.
-pub fn cmd_open(session: &str) -> Result<(), Box<dyn std::error::Error>> {
-    eprintln!("Not yet implemented: open (session: {session})");
-    Err(Box::from("not yet implemented"))
+/// Handles the `open` subcommand — loads the named session and launches the TUI.
+///
+/// Prints a user-friendly message to stderr and returns `Err` when the session
+/// does not exist. Any other storage or TUI error is propagated to the caller.
+pub fn cmd_open(session_name: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let session = storage::load_session(session_name).map_err(|e| {
+        if matches!(e, storage::StorageError::SessionNotFound(_)) {
+            eprintln!(
+                "Session '{session_name}' not found. Run 'cvss-dump list' to see available sessions."
+            );
+        }
+        Box::new(e) as Box<dyn std::error::Error>
+    })?;
+
+    tui::run_tui(session)
 }
 
 /// A single row of data collected for the session list table.
