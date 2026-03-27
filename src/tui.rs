@@ -925,7 +925,7 @@ mod tests {
     fn new_finding_round_trip_computes_correct_score_and_severity() {
         let form = filled_form();
         form.validate().expect("form must be valid before building");
-        let finding = form.build_finding();
+        let finding = form.build_finding().expect("build_finding must succeed after validate");
 
         assert_eq!(finding.title, "SQL Injection");
         assert_eq!(finding.cvss_score, 9.8);
