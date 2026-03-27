@@ -160,7 +160,8 @@ fn render_findings_list(frame: &mut ratatui::Frame, state: &TuiState, area: rata
         .iter()
         .map(|f| {
             let severity_label = severity_label(&f.severity);
-            let line = format!("[{}] {} ({:.1})", severity_label, f.title, f.cvss_score);
+            let safe_title = strip_ansi(&f.title);
+            let line = format!("[{}] {} ({:.1})", severity_label, safe_title, f.cvss_score);
             ListItem::new(line)
         })
         .collect();
