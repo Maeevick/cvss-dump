@@ -109,10 +109,7 @@ impl FormState {
 
     /// Moves focus to the previous field, wrapping at the start.
     pub fn focus_prev(&mut self) {
-        self.active_field = self
-            .active_field
-            .checked_sub(1)
-            .unwrap_or(FIELD_COUNT - 1);
+        self.active_field = self.active_field.checked_sub(1).unwrap_or(FIELD_COUNT - 1);
     }
 
     /// Appends `ch` to the active field buffer after stripping ANSI sequences.
@@ -164,12 +161,13 @@ impl FormState {
 
     /// Builds a `Finding` from the current form buffers.
     ///
-    /// Caller must have already validated the form. Panics are not expected
-    /// because `validate()` guarantees the vector is parseable before this
-    /// is called.
-    pub fn build_finding(&self) -> Finding {
+    /// Caller must have already validated the form via `validate()`.
+    /// Returns `Err` if the CVSS vector fails to parse — this is a bug if
+    /// `validate()` was called first, and the error message makes that explicit.
+    pub fn build_finding(&self) -> Result<Finding, String> {
         let vector = strip_ansi(self.buffers[FIELD_CVSS_VECTOR].trim());
-        let score = crate::cvss::base_score(&vector).unwrap_or(0.0);
+        let score = crate::cvss::base_score(&vector)
+            .map_err(|_| "build_finding: CVSS parse failed after validate() — this is a bug".to_string())?;
         let severity = Severity::from_score(score);
 
         let refs_raw = strip_ansi(self.buffers[FIELD_REFERENCES].trim());
@@ -296,7 +294,8 @@ impl TuiState {
                     }
                     FormMode::Edit(id) => {
                         let id = *id;
-                        if let Some(existing) = self.session.findings.iter_mut().find(|f| f.id == id)
+                        if let Some(existing) =
+                            self.session.findings.iter_mut().find(|f| f.id == id)
                         {
                             *existing = finding;
                         }
@@ -858,17 +857,30 @@ mod tests {
     fn cvss_live_feedback_valid_vector_shows_score_and_severity() {
         let mut form = FormState::new();
         form.buffers[FIELD_CVSS_VECTOR] = VALID_VECTOR.to_string();
-        let feedback = form.cvss_live_feedback().expect("feedback must be Some for valid vector");
-        assert!(feedback.contains("9.8"), "expected score 9.8 in: {feedback}");
-        assert!(feedback.contains("CRITICAL"), "expected CRITICAL in: {feedback}");
+        let feedback = form
+            .cvss_live_feedback()
+            .expect("feedback must be Some for valid vector");
+        assert!(
+            feedback.contains("9.8"),
+            "expected score 9.8 in: {feedback}"
+        );
+        assert!(
+            feedback.contains("CRITICAL"),
+            "expected CRITICAL in: {feedback}"
+        );
     }
 
     #[test]
     fn cvss_live_feedback_invalid_vector_shows_warning() {
         let mut form = FormState::new();
         form.buffers[FIELD_CVSS_VECTOR] = "INVALID".to_string();
-        let feedback = form.cvss_live_feedback().expect("feedback must be Some for non-empty buffer");
-        assert!(feedback.contains('⚠'), "expected warning symbol in: {feedback}");
+        let feedback = form
+            .cvss_live_feedback()
+            .expect("feedback must be Some for non-empty buffer");
+        assert!(
+            feedback.contains('⚠'),
+            "expected warning symbol in: {feedback}"
+        );
     }
 
     // --- new finding round-trip ---
@@ -906,7 +918,10 @@ mod tests {
         let mut form = filled_form();
         form.buffers[FIELD_REFERENCES] = "CVE-2021-1234, https://example.com".to_string();
         let finding = form.build_finding();
-        assert_eq!(finding.references, vec!["CVE-2021-1234", "https://example.com"]);
+        assert_eq!(
+            finding.references,
+            vec!["CVE-2021-1234", "https://example.com"]
+        );
     }
 
     // --- edit finding round-trip ---
