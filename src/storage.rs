@@ -241,4 +241,104 @@ mod tests {
             "tmp file must not remain after successful save"
         );
     }
+
+    // --- StorageError::Display ---
+
+    #[test]
+    fn display_directory_creation_failed() {
+        let io_err = std::io::Error::other("test");
+        let msg = StorageError::DirectoryCreationFailed(io_err).to_string();
+        assert!(
+            msg.starts_with("failed to create sessions directory:"),
+            "unexpected message: {msg}"
+        );
+    }
+
+    #[test]
+    fn display_session_not_found() {
+        let msg = StorageError::SessionNotFound("foo".to_string()).to_string();
+        assert_eq!(msg, "session not found: foo");
+    }
+
+    #[test]
+    fn display_corrupted_json() {
+        let serde_err = serde_json::from_str::<crate::domain::Session>("invalid").unwrap_err();
+        let msg = StorageError::CorruptedJson(serde_err).to_string();
+        assert!(
+            msg.starts_with("corrupted session JSON:"),
+            "unexpected message: {msg}"
+        );
+    }
+
+    #[test]
+    fn display_write_failed() {
+        let io_err = std::io::Error::other("test");
+        let msg = StorageError::WriteFailed(io_err).to_string();
+        assert!(
+            msg.starts_with("failed to write session file:"),
+            "unexpected message: {msg}"
+        );
+    }
+
+    #[test]
+    fn display_read_failed() {
+        let io_err = std::io::Error::other("test");
+        let msg = StorageError::ReadFailed(io_err).to_string();
+        assert!(
+            msg.starts_with("failed to read session file:"),
+            "unexpected message: {msg}"
+        );
+    }
+
+    #[test]
+    fn display_home_dir_not_found() {
+        let msg = StorageError::HomeDirNotFound.to_string();
+        assert_eq!(msg, "HOME environment variable is not set");
+    }
+
+    // --- storage_dir() ---
+
+    #[test]
+    fn storage_dir_returns_ok_and_ends_with_expected_suffix() {
+        let dir = storage_dir().expect("storage_dir must succeed when HOME is set");
+        assert!(
+            dir.ends_with(".cvss-dump/sessions"),
+            "expected path ending with .cvss-dump/sessions, got: {dir:?}"
+        );
+    }
+
+    // --- session_path() ---
+
+    #[test]
+    fn session_path_ends_with_json_filename() {
+        let path = session_path("my-session").expect("session_path must succeed");
+        assert!(
+            path.ends_with("my-session.json"),
+            "expected path ending with my-session.json, got: {path:?}"
+        );
+    }
+
+    // --- save_session / load_session / list_sessions ---
+
+    #[test]
+    fn save_load_list_sessions_via_default_storage_dir() {
+        let name = format!("test-{}", uuid::Uuid::new_v4().simple());
+        let session = temp_session(&name);
+
+        save_session(&session).expect("save_session must succeed");
+
+        let loaded = load_session(&name).expect("load_session must succeed");
+        assert_eq!(loaded.name, name);
+        assert_eq!(loaded.scope, session.scope);
+
+        let names = list_sessions().expect("list_sessions must succeed");
+        assert!(
+            names.contains(&name),
+            "list_sessions must include the saved session name"
+        );
+
+        let dir = storage_dir().expect("storage_dir must succeed");
+        fs::remove_file(dir.join(format!("{name}.json")))
+            .expect("cleanup of test session file must succeed");
+    }
 }
