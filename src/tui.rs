@@ -194,23 +194,35 @@ fn render_detail(frame: &mut ratatui::Frame, state: &TuiState, area: ratatui::la
             let refs = if finding.references.is_empty() {
                 "None".to_string()
             } else {
-                finding.references.join(", ")
+                finding
+                    .references
+                    .iter()
+                    .map(|r| strip_ansi(r))
+                    .collect::<Vec<_>>()
+                    .join(", ")
             };
             let score_str = format!("{:.1}", finding.cvss_score);
             let severity_str = severity_label(&finding.severity);
 
+            let safe_title = strip_ansi(&finding.title);
+            let safe_vector = strip_ansi(&finding.cvss_vector);
+            let safe_affected = strip_ansi(&finding.affected);
+            let safe_description = strip_ansi(&finding.description);
+            let safe_evidence = strip_ansi(&finding.evidence);
+            let safe_remediation = strip_ansi(&finding.remediation);
+
             let lines: Vec<Line> = vec![
-                detail_line("Title", &finding.title),
-                detail_line("CVSS Vector", &finding.cvss_vector),
+                detail_line("Title", &safe_title),
+                detail_line("CVSS Vector", &safe_vector),
                 detail_line("Score", &score_str),
                 detail_line("Severity", &severity_str),
-                detail_line("Affected", &finding.affected),
+                detail_line("Affected", &safe_affected),
                 Line::raw(""),
-                detail_line("Description", &finding.description),
+                detail_line("Description", &safe_description),
                 Line::raw(""),
-                detail_line("Evidence", &finding.evidence),
+                detail_line("Evidence", &safe_evidence),
                 Line::raw(""),
-                detail_line("Remediation", &finding.remediation),
+                detail_line("Remediation", &safe_remediation),
                 Line::raw(""),
                 detail_line("References", &refs),
             ];
