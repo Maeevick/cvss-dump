@@ -195,6 +195,7 @@ impl MetricField {
         }
     }
 
+    /// Returns the currently selected option code string for the given metric slot.
     pub fn current_value(&self, slot: usize) -> &'static str {
         CVSS_METRICS[slot].options[self.selected]
     }
