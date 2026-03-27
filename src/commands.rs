@@ -85,16 +85,34 @@ pub fn cmd_new() -> Result<(), Box<dyn std::error::Error>> {
 
 /// Handles the `open` subcommand — loads the named session and launches the TUI.
 ///
-/// Prints a user-friendly message to stderr and returns `Err` when the session
-/// does not exist. Any other storage or TUI error is propagated to the caller.
+/// Returns `Err` with a user-facing message when the session does not exist or
+/// is corrupted. Any other storage or TUI error is propagated to the caller.
 pub fn cmd_open(session_name: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let session = storage::load_session(session_name).map_err(|e| {
-        if matches!(e, storage::StorageError::SessionNotFound(_)) {
-            eprintln!(
+    let dir = storage::storage_dir().map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+    cmd_open_from(session_name, &dir)
+}
+
+/// Testable variant of `cmd_open` that loads from `base_dir` instead of the default storage dir.
+pub fn cmd_open_from(
+    session_name: &str,
+    base_dir: &std::path::Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let session = storage::load_session_from(session_name, base_dir).map_err(|e| {
+        match &e {
+            storage::StorageError::SessionNotFound(_) => Box::from(format!(
                 "Session '{session_name}' not found. Run 'cvss-dump list' to see available sessions."
-            );
+            )),
+            storage::StorageError::CorruptedJson(_) => {
+                let path = base_dir
+                    .join(format!("{session_name}.json"))
+                    .display()
+                    .to_string();
+                Box::from(format!(
+                    "Session '{session_name}' is corrupted ({path}). Run 'cvss-dump repair {session_name}' to attempt recovery."
+                ))
+            }
+            _ => Box::new(e) as Box<dyn std::error::Error>,
         }
-        Box::new(e) as Box<dyn std::error::Error>
     })?;
 
     tui::run_tui(session)
