@@ -427,7 +427,9 @@ pub fn run_tui(session: Session) -> Result<(), Box<dyn std::error::Error>> {
                     continue;
                 }
 
-                if state.form.is_some() {
+                if state.confirm_delete.is_some() {
+                    handle_confirm_delete_key(&mut state, key.code)?;
+                } else if state.form.is_some() {
                     handle_form_key(&mut state, key.code, key.modifiers)?;
                 } else {
                     match key.code {
@@ -436,7 +438,7 @@ pub fn run_tui(session: Session) -> Result<(), Box<dyn std::error::Error>> {
                         KeyCode::Char('k') => state.select_prev(),
                         KeyCode::Char('n') => state.open_new_form(),
                         KeyCode::Char('e') => state.open_edit_form(),
-                        KeyCode::Char('d') => {} // stub: confirmation added in next task
+                        KeyCode::Char('d') => state.open_confirm_delete(),
                         KeyCode::Char('r') => {} // stub: report export added in next task
                         _ => {}
                     }
