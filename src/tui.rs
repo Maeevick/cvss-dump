@@ -359,8 +359,9 @@ impl FormState {
     /// emptiness. Returns `Err(message)` for the first violation found.
     pub fn validate(&self) -> Result<(), String> {
         for &field_idx in &REQUIRED_TEXT_FIELD_INDICES {
-            let buf_idx = text_buffer_index(field_idx)
-                .unwrap_or_else(|| unreachable!("REQUIRED_TEXT_FIELD_INDICES contains only text-field indices"));
+            let buf_idx = text_buffer_index(field_idx).unwrap_or_else(|| {
+                unreachable!("REQUIRED_TEXT_FIELD_INDICES contains only text-field indices")
+            });
             if self.buffers[buf_idx].trim().is_empty() {
                 return Err(format!("⚠ {} is required", FIELD_LABELS[field_idx]));
             }
